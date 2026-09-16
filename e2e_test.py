@@ -139,7 +139,7 @@ async def run_e2e():
 
     # Verify manual worktree was not touched
     if os.path.exists(UNTOUCHED_WORKTREE):
-        print(f"\nUntouched worktree exists: {UNTOUCHED_WORKTREE} ✓")
+        print(f"\nUntouched worktree exists: {UNTOUCHED_WORKTREE} [OK]")
     else:
         print(f"\nWarning: {UNTOUCHED_WORKTREE} not found (may have been removed externally)")
 
