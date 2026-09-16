@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ForgeFlow Command Center</title>
+<link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-name"><span class="brand-mark">FF</span> ForgeFlow</div>
+      <div class="brand-sub">Command Center</div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="sidebar-foot">
+      <div class="conn"><span class="dot" id="conn-dot"></span><span id="conn-text">Connecting...</span></div>
+      <div style="margin-top:6px" id="conn-sub">-</div>
+    </div>
+  </aside>
+  <div class="main">
+    <header class="topbar">
+      <h1 id="page-title">Overview</h1>
+      <div class="spacer"></div>
+      <span class="faint mono" id="clock"></span>
+      <button class="btn sm" id="btn-refresh">Refresh</button>
+    </header>
+    <main class="content" id="view"></main>
+  </div>
+</div>
+<div class="toast-wrap" id="toasts"></div>
+<div id="modal-root"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
