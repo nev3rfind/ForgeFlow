@@ -179,6 +179,35 @@ class Orchestrator:
         await self.task_service.emit_event(task.id, "ARTIFACT", {"name": name, "path": path})
         return artifact
 
+    async def _append_artifact(self, task: Task, name: str, content: str) -> Artifact:
+        workspace_root = getattr(self.git_service, "workspace_root", None) or "./runtime/worktrees"
+        artifacts_dir = os.path.join(workspace_root, "artifacts", task.id)
+        os.makedirs(artifacts_dir, exist_ok=True)
+        path = os.path.join(artifacts_dir, name)
+        
+        mode = "a" if os.path.exists(path) else "w"
+        with open(path, mode, encoding="utf-8") as f:
+            if mode == "a":
+                f.write("\n\n")
+            f.write(content)
+            
+        # Also mirror into the worktree
+        if task.current_worktree and os.path.isdir(task.current_worktree):
+            try:
+                wt_path = os.path.join(task.current_worktree, name)
+                wt_mode = "a" if os.path.exists(wt_path) else "w"
+                with open(wt_path, wt_mode, encoding="utf-8") as f:
+                    if wt_mode == "a":
+                        f.write("\n\n")
+                    f.write(content)
+            except Exception:
+                pass
+                
+        artifact = Artifact(task_id=task.id, name=name, path=path)
+        self.task_service.repo.save_artifact(artifact)
+        await self.task_service.emit_event(task.id, "ARTIFACT", {"name": name, "path": path})
+        return artifact
+
     async def _process_state(self, task: Task) -> bool:
         """Advance the task by one state. Returns False if no branch matched."""
         project = self.project_service.get_project(task.project_id)
@@ -356,6 +385,7 @@ class Orchestrator:
             
             if result:
                 await self._write_artifact(task, "REVIEW.md", self._review_markdown(result))
+                await self._append_artifact(task, "REVIEW_HISTORY.md", f"## Iteration {task.iteration}\n" + self._review_markdown(result))
                 decision = str(result.get("decision", "")).strip().upper()
                 if decision == "APPROVED":
                     await self.task_service.update_status(task.id, TaskState.APPROVED)
@@ -480,8 +510,15 @@ class Orchestrator:
                 lines += [f"- {f}" for f in findings]
             else:
                 lines.append(str(findings))
-        if result.get("required_changes"):
-            lines += ["", "## Required Changes", "", str(result.get("required_changes"))]
+        required_changes = result.get("required_changes")
+        if required_changes:
+            lines += ["", "## Required Changes", ""]
+            if isinstance(required_changes, list):
+                lines += [f"- {c}" for c in required_changes]
+            else:
+                lines.append(str(required_changes))
+        if result.get("remaining_uncertainty"):
+            lines += ["", "## Remaining Uncertainty", "", str(result.get("remaining_uncertainty"))]
         return "\n".join(lines) + "\n"
 
     @staticmethod

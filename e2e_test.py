@@ -144,10 +144,10 @@ async def run_e2e():
         print(f"\nWarning: {UNTOUCHED_WORKTREE} not found (may have been removed externally)")
 
     if task.status == TaskState.COMPLETED:
-        print("\n✓ E2E test PASSED")
+        print("\n[PASS] E2E test PASSED")
         return 0
     else:
-        print("\n✗ E2E test FAILED")
+        print("\n[FAIL] E2E test FAILED")
         return 1
 
 
