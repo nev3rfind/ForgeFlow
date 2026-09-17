@@ -78,15 +78,13 @@ async def run_e2e():
         )
     print(f"Project id: {test_project.id}")
 
-    # Create a new task that requires an actual code change (not just a text file)
+    # Create a new task that requires fixing the broken calculator fixture
     task = await task_service.create_task(
         project_id=test_project.id,
-        title="Add a multiply utility",
+        title="Fix broken calculator add function",
         description=(
-            "Create a new Python file named 'multiply.py' containing a single function "
-            "'multiply(a, b)' that returns the product of a and b. "
-            "Also create 'test_multiply.py' with at least one pytest test that verifies "
-            "multiply(3, 4) == 12."
+            "The `add(a, b)` function in `calculator.py` is broken and returns `a - b`. "
+            "Fix the implementation to correctly return `a + b` so that `test_calculator.py` passes."
         ),
         requirements="Python only. Use pytest. No third-party packages.",
     )
@@ -106,7 +104,10 @@ async def run_e2e():
             elif chunk.get("type") == "tool_call":
                 print(f"  [TOOL CALL] {chunk.get('name')}")
         elif etype == "STATE_CHANGED":
-            print(f"  [STATE] {event.payload.get('status')}")
+            state_val = event.payload.get('new_state')
+            if hasattr(state_val, "value"):
+                state_val = state_val.value
+            print(f"  [STATE] {state_val}")
         elif etype in ("TEST_RESULT", "REVIEWER_FALLBACK", "ARTIFACT"):
             print(f"  [{etype}]")
 

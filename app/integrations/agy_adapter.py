@@ -274,12 +274,16 @@ class AgyProvider(AgentProvider):
         if coerced is not None:
             try:
                 return schema.model_validate(coerced)
-            except ValidationError:
-                logger.debug("Structured payload failed schema validation, trying text fallback.")
+            except ValidationError as ve:
+                logger.warning(f"Structured payload failed schema validation: {ve}\nPayload: {coerced}")
 
-        # Text fallback – extract last JSON object from assistant text only
-        if final_text:
-            parsed = _extract_last_json_object(final_text)
+        # Text fallback — extract last JSON object from assistant text OR the raw response string
+        fallback_text = final_text or ""
+        if isinstance(structured, str):
+            fallback_text += "\n" + structured
+            
+        if fallback_text.strip():
+            parsed = _extract_last_json_object(fallback_text)
             if parsed is not None:
                 try:
                     return schema.model_validate(parsed)
@@ -287,6 +291,11 @@ class AgyProvider(AgentProvider):
                     raise AgyProviderError(
                         f"Fallback JSON extracted from agent text did not match schema: {ve}"
                     ) from ve
+
+        if coerced is not None:
+            raise AgyProviderError(
+                f"Agy CLI produced JSON that failed schema validation.\nPayload: {coerced}"
+            )
 
         raise AgyProviderError(
             "Agy CLI did not produce a valid structured result matching the required schema. "
@@ -488,7 +497,7 @@ class AgyProvider(AgentProvider):
             if event["type"] == "text":
                 final_text += event.get("content", "")
             elif event["type"] == "__raw_result__":
-                structured_data = event["data"].get("response")
+                structured_data = event["data"].get("structured_output") or event["data"].get("response")
 
         return self._validate_or_fallback(structured_data, final_text, schema)
 
@@ -511,7 +520,7 @@ class AgyProvider(AgentProvider):
             elif event["type"] in ("tool_call", "tool_result", "diagnostic"):
                 yield event
             elif event["type"] == "__raw_result__":
-                structured_data = event["data"].get("response")
+                structured_data = event["data"].get("structured_output") or event["data"].get("response")
 
         validated = self._validate_or_fallback(structured_data, final_text, schema)
         yield {"type": "structured_output", "data": validated.model_dump()}
