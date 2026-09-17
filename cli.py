@@ -48,7 +48,12 @@ def main():
         print(r.json())
     
     elif args.command == "serve":
-        uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
+        loop_opt = "auto"
+        if sys.platform == "win32":
+            # Uvicorn on Windows defaults to SelectorEventLoop which does not support async subprocesses.
+            # We force it to leave the default ProactorEventLoop intact.
+            loop_opt = "none"
+        uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True, loop=loop_opt)
         
     elif args.command == "project":
         if args.project_cmd == "list":

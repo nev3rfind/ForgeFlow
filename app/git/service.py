@@ -48,16 +48,40 @@ class GitService:
 
     async def _run_git(self, repo_path: str, *args) -> Tuple[int, str, str]:
         cmd = ['git', '-c', 'core.longpaths=true'] + list(args)
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            cwd=repo_path,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE
-        )
-        stdout, stderr = await process.communicate()
+        
+        try:
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=repo_path,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            stdout, stderr = await process.communicate()
+            returncode = process.returncode
+        except NotImplementedError:
+            # Fallback for Windows environments running SelectorEventLoop (e.g. old uvicorn, jupyter)
+            # which do not support async subprocesses natively.
+            def _run_sync():
+                import subprocess
+                try:
+                    # Windows specific flag to hide console window
+                    creationflags = 0x08000000 if os.name == 'nt' else 0
+                    result = subprocess.run(
+                        cmd,
+                        cwd=repo_path,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        creationflags=creationflags
+                    )
+                    return result.returncode, result.stdout, result.stderr
+                except Exception as e:
+                    return 1, b"", str(e).encode('utf-8')
+            
+            returncode, stdout, stderr = await asyncio.to_thread(_run_sync)
+
         out_str = stdout.decode('utf-8', errors='replace').strip()
         err_str = stderr.decode('utf-8', errors='replace').strip()
-        return process.returncode, out_str, err_str
+        return returncode, out_str, err_str
 
     async def prune_worktrees(self, repo_path: str) -> bool:
         """Prune dead worktree metadata from .git/worktrees where working directory no longer exists on disk."""

@@ -52,6 +52,17 @@ the physical filesystem, and UI layers.
    - **SQLite Database**: Stores projects, tasks, events, and iterations.
    - **Repository Pattern**: Abstracts raw SQL queries away from the business logic.
 
+## Windows Async Subprocesses
+
+On Windows, Python's `asyncio` framework has two main event loop policies: `ProactorEventLoop` and `SelectorEventLoop`.
+- **ProactorEventLoop** (Python 3.8+ default) supports async subprocesses via `asyncio.create_subprocess_exec()`.
+- **SelectorEventLoop** does not support async subprocesses and raises `NotImplementedError`.
+
+ForgeFlow relies heavily on async subprocesses to orchestrate tools, git worktrees, and AgyProvider workers. Because some test runners or web server configurations (such as older Uvicorn setups) might force a `SelectorEventLoop`, ForgeFlow implements specific safeguards:
+1. **Global Configuration:** `app/config.py` explicitly sets `asyncio.WindowsProactorEventLoopPolicy()` upon import to protect against unintentional overrides.
+2. **CLI Override:** The `cli.py serve` command bypasses `uvicorn`'s internal Windows loop override by passing `loop="none"`.
+3. **Graceful Fallback:** Operations that could fail due to a forced `SelectorEventLoop` (such as `GitService._run_git`) contain a graceful fallback to a background thread using `asyncio.to_thread(subprocess.run)`.
+
 ---
 
 ## Data Flow & Review Architecture

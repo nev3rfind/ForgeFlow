@@ -304,3 +304,27 @@ async def test_prune_worktrees_removes_orphaned_metadata_safely(git_repo):
     # Cleanup
     subprocess.run(["git", "worktree", "remove", "--force", manual_wt], cwd=repo_dir, capture_output=True)
 
+
+@pytest.mark.asyncio
+
+async def test_windows_selector_event_loop_fallback(git_repo):
+    import sys
+    import asyncio
+    from unittest.mock import patch
+
+    repo_path = git_repo["repo_dir"]
+    service = git_repo["service"]
+    
+    # We patch create_subprocess_exec to always raise NotImplementedError
+    # to simulate Windows SelectorEventLoop environment
+    with patch('asyncio.create_subprocess_exec', side_effect=NotImplementedError):
+        # This should hit the fallback and still succeed
+        is_repo = await service.is_git_repository(repo_path)
+        assert is_repo is True
+        
+        # Test a failing command too
+        try:
+            await service.create_worktree(repo_path, 'fake_task', 'nonexistent_branch')
+            assert False, 'Should have raised GitError'
+        except GitError:
+            pass

@@ -5,8 +5,18 @@ application can be configured without modifying source code. No secrets are
 stored here; secrets (e.g. API keys) are read from the environment at runtime.
 """
 import os
+import sys
+import asyncio
 from dataclasses import dataclass
 from typing import Optional
+
+# Ensure Windows uses ProactorEventLoop to support async subprocesses,
+# overriding any SelectorEventLoop defaults (e.g. from pytest or old uvicorn).
+if sys.platform == "win32":
+    try:
+        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+    except Exception:
+        pass
 
 
 def get_env_or_registry(key: str, default: Optional[str] = None) -> Optional[str]:
