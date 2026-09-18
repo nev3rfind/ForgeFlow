@@ -1,6 +1,6 @@
 {
   "orchestrator": {
-    "provider": "agy",
+    "provider": "agy_desktop",
     "model": "default"
   },
   "investigator": {

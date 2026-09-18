@@ -857,6 +857,16 @@ function viewMission() {
   }
 
   tlCard.appendChild(tlBody);
+  
+  if (t.status === "FAILED" && t.error_information) {
+    tlCard.appendChild(
+      el("div", { class: "card-body", style: "border-top: 1px solid rgba(182, 79, 79, 0.2); background: rgba(182, 79, 79, 0.05);" },
+        el("h4", { style: "color: var(--err); margin: 0 0 8px 0;" }, "Failure Reason"),
+        el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; word-break: break-all;" }, t.error_information)
+      )
+    );
+  }
+  
   right.appendChild(tlCard);
 
   // Quick Action Buttons
@@ -934,14 +944,34 @@ function viewSettings() {
     el("h3", { text: "Providers", style: "margin-bottom: 16px; color: var(--brand-burgundy-deep);" })
   );
   for (const p of state.providers) {
+    const isDesktop = p.id === "agy_desktop";
+    
     provWrap.appendChild(el("div", { class: "card flex", style: "justify-content: space-between; margin-bottom: 12px;" },
       el("div", {},
         el("div", { style: "font-weight: 600; font-size: 15px; margin-bottom: 4px;" }, p.display_name),
         el("div", { class: "faint", style: "font-size: 13px;" }, "Supported roles: " + (p.supported_roles || []).join(", "))
       ),
-      el("div", { class: "flex" },
-        el("div", { class: "dot " + (p.status === "Connected" ? "ok" : "err") }),
-        el("span", { style: "font-weight: 500;", text: p.status })
+      el("div", { class: "flex", style: "gap: 16px;" },
+        isDesktop ? el("button", { 
+          class: "btn sm ghost", 
+          text: "Test Connection", 
+          onclick: () => {
+            toast("Testing RPA Connection...", "info");
+            api("/providers/test-desktop", {method: "POST"})
+              .then(res => {
+                 if (res.status === "success") {
+                    toast(res.message, "ok");
+                 } else {
+                    toast("RPA Error: " + res.message, "err");
+                 }
+              })
+              .catch(e => toast("Network error: " + e.message, "err"));
+          }
+        }) : null,
+        el("div", { class: "flex" },
+          el("div", { class: "dot " + (p.status === "Connected" ? "ok" : (p.status === "RPA Ready" ? "warn" : "err")) }),
+          el("span", { style: "font-weight: 500;", text: p.status })
+        )
       )
     ));
   }

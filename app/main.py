@@ -446,6 +446,25 @@ async def get_abacus_billing():
         "message": "Abacus.AI currently directs users to the web dashboard for exact credit limits. This widget will auto-sync once the official SDK exposes the billing API."
     }
 
+
+@app.post("/providers/test-desktop")
+async def test_desktop_connection():
+    try:
+        from app.integrations.desktop_rpa_engine import DesktopRPAEngine
+        # Initialize engine pointing to Antigravity window
+        rpa = DesktopRPAEngine(".*Antigravity.*")
+        
+        # Check if we can connect and focus
+        rpa.connect()
+        
+        # Test input (just pasting to clipboard and typing, without hitting enter to keep it safe)
+        rpa.paste_text("RPA Connection Test Successful!")
+        
+        return {"status": "success", "message": "Successfully found the Antigravity Desktop app and injected text."}
+    except Exception as e:
+        import traceback
+        return {"status": "error", "message": str(e), "details": traceback.format_exc()}
+
 @app.post("/providers/custom")
 async def add_custom_provider(info: ProviderInfo):
     from app.registry import provider_registry
