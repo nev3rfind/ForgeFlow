@@ -488,7 +488,7 @@ function viewOverview() {
 /* ---------- view: Projects ---------- */
 function viewProjects() {
   const wrap = el("div", {});
-  wrap.appendChild(el("div", { class: "toolbar" },
+  wrap.appendChild(el("div", { class: "toolbar", style: "display: flex; gap: 12px; margin-bottom: 24px;" },
     el("div", { class: "spacer" }),
     el("button", { class: "btn primary", text: "+ New Project", onclick: openNewProject })
   ));
@@ -497,7 +497,8 @@ function viewProjects() {
     return wrap;
   }
   const card = el("div", { class: "card pad-0" });
-  const table = el("table", {},
+  const twrap = el("div", { class: "table-wrap" });
+    const table = el("table", { class: "table" },
     el("thead", {}, el("tr", {},
       el("th", { text: "Name" }), el("th", { text: "Type" }), el("th", { text: "Repository" }),
       el("th", { text: "Test Command" }), el("th", { text: "Tasks" }), el("th", { text: "Created" }), el("th", { text: "" })
@@ -521,7 +522,8 @@ function viewProjects() {
     ));
   }
   table.appendChild(tbody);
-  card.appendChild(table);
+  twrap.appendChild(table);
+    card.appendChild(twrap);
   wrap.appendChild(card);
   return wrap;
 }
@@ -555,7 +557,7 @@ function viewTasks() {
     el("option", { value: "ALL", text: "All projects" }),
     state.projects.map((p) => el("option", { value: p.id, text: p.name, selected: f.project === p.id ? "selected" : null }))
   );
-  wrap.appendChild(el("div", { class: "toolbar" },
+  wrap.appendChild(el("div", { class: "toolbar", style: "display: flex; gap: 12px; margin-bottom: 24px;" },
     search, statusSel, projSel,
     el("button", { class: "btn sm ghost", text: "Clear", onclick: () => { state.filters = { search: "", status: "ALL", project: "ALL" }; render(); } }),
     el("div", { class: "spacer" }),
@@ -567,7 +569,8 @@ function viewTasks() {
     return wrap;
   }
   const card = el("div", { class: "card pad-0" });
-  const table = el("table", {},
+  const twrap = el("div", { class: "table-wrap" });
+    const table = el("table", { class: "table" },
     el("thead", {}, el("tr", {},
       el("th", { text: "Title" }), el("th", { text: "Project" }), el("th", { text: "Status" }),
       el("th", { text: "Agent" }), el("th", { text: "Iter" }), el("th", { text: "Elapsed" }), el("th", { text: "" })
@@ -597,7 +600,8 @@ function viewTasks() {
     ));
   }
   table.appendChild(tbody);
-  card.appendChild(table);
+  twrap.appendChild(table);
+    card.appendChild(twrap);
   wrap.appendChild(card);
   return wrap;
 }
@@ -606,7 +610,7 @@ function viewTasks() {
 function viewKanban() {
   const wrap = el("div", {});
   const rows = filteredTasks();
-  wrap.appendChild(el("div", { class: "toolbar" },
+  wrap.appendChild(el("div", { class: "toolbar", style: "display: flex; gap: 12px; margin-bottom: 24px;" },
     el("input", { class: "search", placeholder: "Search tasks...", value: state.filters.search,
       oninput: (e) => { state.filters.search = e.target.value; render(); }
     }),
@@ -709,7 +713,8 @@ function viewActivity() {
   }
 
   const feedCard = el("div", { class: "card pad-0" });
-  const table = el("table", { class: "table" },
+  const twrap = el("div", { class: "table-wrap" });
+    const table = el("table", { class: "table" },
     el("thead", {},
       el("tr", {},
         el("th", { text: "Time" }),
@@ -755,7 +760,8 @@ function viewActivity() {
     ));
   }
 
-  feedCard.appendChild(table);
+  twrap.appendChild(table);
+  feedCard.appendChild(twrap);
   wrap.appendChild(feedCard);
   return wrap;
 }
@@ -969,7 +975,33 @@ function viewSettings() {
   }
   wrap.appendChild(provWrap);
 
-  // --- DANGER ZONE ---
+  
+  // --- CONFIGURATION ---
+  const cfg = state.config || {};
+  const genCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "System Configuration" })));
+  const genB = el("div", { class: "card-body" });
+  
+  const keys = Object.keys(cfg).sort();
+  for (const k of keys) {
+    const v = cfg[k];
+    let node;
+    if (typeof v === "boolean") {
+      node = el("span", { class: "badge " + (v ? "done" : "pend"), text: v ? "true" : "false" });
+    } else if (v === null || v === undefined) {
+      node = el("span", { class: "faint", text: "-" });
+    } else {
+      node = el("span", { class: "mono faint", style: "font-size: 13px;", text: String(v) });
+    }
+    const row = el("div", { style: "display: flex; padding: 8px 0; border-bottom: 1px solid var(--border-warm);" }, 
+      el("div", { class: "mono", style: "width: 300px; font-size: 13px; font-weight: 600; color: var(--text-main);" }, k), 
+      el("div", { class: "v" }, [node])
+    );
+    genB.appendChild(row);
+  }
+  genCard.appendChild(genB);
+  wrap.appendChild(genCard);
+
+// --- DANGER ZONE ---
   const dz = el("div", { class: "danger-zone mt" },
     el("h3", { text: "Danger Zone" }),
     el("div", { class: "danger-row" },
