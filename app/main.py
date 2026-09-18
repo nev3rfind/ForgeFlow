@@ -427,6 +427,20 @@ async def reset_data():
 
     return {"status": "success"}
 
+
+@app.post("/system/restart")
+async def restart_system():
+    # We return a success response, then trigger a background task to exit with code 42
+    import asyncio
+    import os
+    
+    async def _do_restart():
+        await asyncio.sleep(1)
+        os._exit(42)
+        
+    asyncio.create_task(_do_restart())
+    return {"status": "success"}
+
 @app.post("/settings/reset-config")
 async def reset_config():
     from app.config import Settings

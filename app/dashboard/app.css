@@ -501,3 +501,79 @@ input[type="text"]:focus, input[type="password"]:focus, input.search:focus {
   border-color: var(--brand-burgundy-primary);
   box-shadow: 0 0 0 2px rgba(143, 49, 84, 0.2);
 }
+
+/* Custom Glassy Select */
+.custom-select {
+  position: relative;
+  width: 100%;
+  font-family: inherit;
+  font-size: 13px;
+  user-select: none;
+}
+.cs-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(145deg, var(--input-bg), rgba(255,255,255,0.02));
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius-sm);
+  padding: 8px 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.custom-select:hover .cs-display {
+  border-color: var(--text-secondary);
+}
+.custom-select.open .cs-display {
+  border-color: var(--brand-burgundy-primary);
+  box-shadow: 0 0 0 2px rgba(143, 49, 84, 0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.cs-icon {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+}
+.custom-select.open .cs-icon {
+  transform: rotate(180deg);
+}
+.cs-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-warm);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1), 0 2px 8px rgba(0,0,0,0.05);
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-8px);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  max-height: 250px;
+  overflow-y: auto;
+}
+[data-theme="dark"] .cs-menu {
+  background: rgba(35, 28, 25, 0.7);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
+}
+.cs-option {
+  padding: 10px 12px;
+  color: var(--text-main);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.cs-option:hover {
+  background: rgba(143, 49, 84, 0.15);
+  color: var(--brand-burgundy-primary);
+}
+.cs-option.active {
+  background: var(--brand-burgundy-primary);
+  color: #fff;
+  font-weight: 500;
+}

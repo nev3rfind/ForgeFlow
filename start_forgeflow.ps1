@@ -15,13 +15,27 @@ if (-not (Test-Path $PythonExe)) {
     exit 1
 }
 
-# 3. Set the required ForgeFlow runtime environment for the current process
+# 3. Terminate any existing instance on port 8000
+Write-Host "Checking for existing ForgeFlow instance on port 8000..." -ForegroundColor Cyan
+$connections = Get-NetTCPConnection -LocalPort 8000 -State Listen -ErrorAction SilentlyContinue
+if ($connections) {
+    foreach ($conn in $connections) {
+        $pidToKill = $conn.OwningProcess
+        if ($pidToKill) {
+            Write-Host "Found existing process (PID: $pidToKill). Terminating..." -ForegroundColor Yellow
+            Stop-Process -Id $pidToKill -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Start-Sleep -Seconds 1
+}
+
+# 4. Set the required ForgeFlow runtime environment for the current process
 $env:FORGEFLOW_IMPLEMENTATION_PROVIDER = "agy"
 $env:ABACUS_REVIEWER_ENABLED = "true"
 $env:ABACUS_REVIEWER_FALLBACK_ENABLED = "false"
 $env:FORGEFLOW_AGY_TIMEOUT = "600"
 
-# 7. Print a small startup summary
+# 5. Print a small startup summary
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host " ForgeFlow" -ForegroundColor White
@@ -41,6 +55,17 @@ Start-Job -ScriptBlock {
     Start-Process "http://127.0.0.1:8000"
 } | Out-Null
 
-# 4 & 5. Start ForgeFlow using the venv Python directly (without --reload)
-# We use --loop none on Windows to avoid Uvicorn replacing the default ProactorEventLoop (needed for async subprocesses)
-& $PythonExe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --loop none
+# 6. Start ForgeFlow in a loop so we can restart it from the UI
+while ($true) {
+    & $PythonExe -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --loop none
+    $exitCode = $LASTEXITCODE
+    if ($exitCode -eq 42) {
+        Write-Host ""
+        Write-Host "Restart triggered from UI. Restarting ForgeFlow..." -ForegroundColor Magenta
+        Write-Host ""
+        Start-Sleep -Seconds 1
+    } else {
+        Write-Host "ForgeFlow shut down."
+        break
+    }
+}

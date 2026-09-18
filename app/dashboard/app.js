@@ -531,10 +531,12 @@ function viewKanban() {
     el("input", { class: "search", placeholder: "Search tasks...", value: state.filters.search,
       oninput: (e) => { state.filters.search = e.target.value; render(); }
     }),
-    el("select", { class: "search", onchange: (e) => { state.filters.project = e.target.value; render(); } },
-      el("option", { value: "ALL", text: "All projects" }),
-      state.projects.map((p) => el("option", { value: p.id, text: p.name, selected: state.filters.project === p.id ? "selected" : null }))
-    ),
+    (function() {
+      const opts = [{ value: "ALL", text: "All projects" }].concat(state.projects.map(p => ({ value: p.id, text: p.name })));
+      const dd = createDropdown(opts, state.filters.project || "ALL", (val) => { state.filters.project = val; render(); });
+      dd.style.width = "250px";
+      return dd;
+    })(),
     el("div", { class: "spacer" }),
     el("span", { class: "faint mono", text: rows.length + " tasks" })
   ));
@@ -1208,6 +1210,68 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 
+
+/* ---------- Custom Select Component ---------- */
+function createDropdown(options, selectedValue, onChange) {
+  const wrap = document.createElement("div");
+  wrap.className = "custom-select";
+  let currentVal = selectedValue;
+  
+  const selectedDisplay = document.createElement("div");
+  selectedDisplay.className = "cs-display";
+  const selectedText = document.createElement("span");
+  selectedText.className = "cs-text";
+  const icon = document.createElement("span");
+  icon.className = "cs-icon";
+  icon.innerHTML = "&#9662;";
+  selectedDisplay.appendChild(selectedText);
+  selectedDisplay.appendChild(icon);
+  
+  const menu = document.createElement("div");
+  menu.className = "cs-menu";
+  
+  const updateDisplay = () => {
+    const opt = options.find(o => o.value === currentVal) || options[0];
+    selectedText.innerText = opt ? opt.text : "";
+  };
+  
+  for (const opt of options) {
+    const item = document.createElement("div");
+    item.className = "cs-option";
+    item.innerText = opt.text;
+    if (opt.value === currentVal) item.classList.add("active");
+    
+    item.onclick = (e) => {
+      e.stopPropagation();
+      currentVal = opt.value;
+      updateDisplay();
+      wrap.classList.remove("open");
+      Array.from(menu.children).forEach(c => c.classList.remove("active"));
+      item.classList.add("active");
+      if (onChange) onChange(currentVal);
+    };
+    menu.appendChild(item);
+  }
+  
+  updateDisplay();
+  
+  selectedDisplay.onclick = (e) => {
+    e.stopPropagation();
+    document.querySelectorAll(".custom-select.open").forEach(c => {
+      if (c !== wrap) c.classList.remove("open");
+    });
+    wrap.classList.toggle("open");
+  };
+  
+  wrap.appendChild(selectedDisplay);
+  wrap.appendChild(menu);
+  return wrap;
+}
+
+document.addEventListener("click", () => {
+  document.querySelectorAll(".custom-select.open").forEach(c => c.classList.remove("open"));
+});
+
 /* ---------- Theme ---------- */
 function toggleTheme() {
   const current = document.documentElement.getAttribute("data-theme");
@@ -1257,5 +1321,23 @@ document.addEventListener("DOMContentLoaded", () => {
     wrap.appendChild(label);
     wrap.appendChild(iconMoon);
     tb.appendChild(wrap);
+
+    // Create restart button
+    const restartBtn = document.createElement("button");
+    restartBtn.className = "btn sm ghost";
+    restartBtn.style.marginLeft = "12px";
+    restartBtn.style.padding = "4px 8px";
+    restartBtn.style.fontSize = "16px";
+    restartBtn.title = "Restart Server";
+    restartBtn.innerHTML = "&#x21bb;"; // refresh/restart icon
+    restartBtn.onclick = async () => {
+      try {
+        toast("Restarting server...", "ok");
+        await api("/system/restart", { method: "POST" });
+        setTimeout(() => window.location.reload(), 2000);
+      } catch (e) {}
+    };
+    
+    tb.appendChild(restartBtn);
   }
 });
