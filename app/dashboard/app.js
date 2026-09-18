@@ -1151,14 +1151,44 @@ document.addEventListener("DOMContentLoaded", () => {
   const saved = localStorage.getItem("forgeflow-theme");
   if (saved) document.documentElement.setAttribute("data-theme", saved);
   
-  // Create theme toggle button in topbar
+  // Create iOS-style theme switch in topbar
   const tb = document.querySelector(".topbar");
   if (tb) {
-    const btn = document.createElement("button");
-    btn.className = "btn sm ghost";
-    btn.style.marginLeft = "8px";
-    btn.innerText = "Toggle Theme";
-    btn.onclick = toggleTheme;
-    tb.appendChild(btn);
+    const wrap = document.createElement("div");
+    wrap.className = "theme-switch-wrapper";
+    wrap.title = "Toggle Dark Mode";
+    
+    const iconSun = document.createElement("span");
+    iconSun.innerHTML = "&#9728;"; // sun icon
+    iconSun.style.fontSize = "14px";
+    iconSun.style.opacity = "0.7";
+    
+    const label = document.createElement("label");
+    label.className = "theme-switch";
+    
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = (document.documentElement.getAttribute("data-theme") === "dark");
+    cb.addEventListener("change", (e) => {
+      const next = e.target.checked ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      localStorage.setItem("forgeflow-theme", next);
+    });
+    
+    const slider = document.createElement("span");
+    slider.className = "slider";
+    
+    const iconMoon = document.createElement("span");
+    iconMoon.innerHTML = "&#9789;"; // moon icon
+    iconMoon.style.fontSize = "13px";
+    iconMoon.style.opacity = "0.7";
+    
+    label.appendChild(cb);
+    label.appendChild(slider);
+    
+    wrap.appendChild(iconSun);
+    wrap.appendChild(label);
+    wrap.appendChild(iconMoon);
+    tb.appendChild(wrap);
   }
 });
