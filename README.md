@@ -122,7 +122,22 @@ $env:FORGEFLOW_IMPLEMENTATION_PROVIDER = "agy"
 python cli.py serve
 ```
 
-## Quick Start
+## Start ForgeFlow on Windows
+
+You can start the entire ForgeFlow environment with one command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File C:\Users\ddona\ForgeFlow\start_forgeflow.ps1
+```
+
+This script automatically:
+- Validates the Python virtual environment.
+- Configures ForgeFlow to use the `agy` implementation provider.
+- Enables the Abacus AI reviewer.
+- Starts the server **without auto-reload** (normal execution intentionally omits `--reload` because ForgeFlow task worktrees are actively modified by workers and must not trigger server restarts).
+- Opens the dashboard in your default browser.
+
+## Quick Start (Manual)
 
 ### 1. Start the ForgeFlow Server
 
