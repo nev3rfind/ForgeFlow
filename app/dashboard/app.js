@@ -160,8 +160,7 @@ const KANBAN = [
   { key: "investigate", title: "Investigate", states: ["INVESTIGATING", "ROOT_CAUSE_READY", "ROOT_CAUSE_REVIEW"] },
   { key: "implement",   title: "Implement",   states: ["IMPLEMENTING", "IMPLEMENTATION_READY", "NEEDS_CHANGES"] },
   { key: "verify",      title: "Verify",      states: ["TESTING", "QA", "REVIEW"] },
-  { key: "done",        title: "Done",        states: ["APPROVED", "COMPLETED"] },
-  { key: "halted",      title: "Halted",      states: ["FAILED", "BLOCKED", "STOPPED", "PAUSED"] }
+  { key: "done",        title: "Done",        states: ["APPROVED", "COMPLETED", "FAILED", "BLOCKED", "STOPPED", "PAUSED"] }
 ];
 
 function statusBadge(status) {
@@ -541,37 +540,82 @@ function viewKanban() {
     el("span", { class: "faint mono", text: rows.length + " tasks" })
   ));
   
+  const formatTime = (t) => {
+    if (!t.created_at) return "00:00";
+    let end = new Date();
+    if (["APPROVED", "COMPLETED", "FAILED", "BLOCKED", "STOPPED", "PAUSED"].includes(t.status) && t.updated_at) {
+      end = new Date(t.updated_at);
+    }
+    const ms = Math.max(0, end - new Date(t.created_at));
+    const m = Math.floor(ms / 60000);
+    const s = Math.floor((ms % 60000) / 1000);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const getCardStateClass = (status) => {
+    if (["COMPLETED", "APPROVED"].includes(status)) return "done";
+    if (["FAILED", "BLOCKED", "STOPPED", "PAUSED"].includes(status)) return "failed";
+    if (["PENDING", "PREPARING"].includes(status)) return "queued";
+    return "active"; // INVESTIGATING, IMPLEMENTING, TESTING, REVIEW, QA
+  };
+  
   const board = el("div", { class: "kanban-board" });
   for (const col of KANBAN) {
     const items = rows.filter((t) => col.states.indexOf(t.status) !== -1);
-    const body = el("div", { style: "display: flex; flex-direction: column; gap: 12px;" });
+    
+    // Check if column has any active tasks
+    const colIsActive = items.some(t => getCardStateClass(t.status) === "active");
+    
+    const body = el("div", { class: "kanban-body" });
     if (!items.length) {
-      body.appendChild(el("div", { class: "faint", style: "text-align: center; padding: 24px 0;", text: "Empty" }));
+      body.appendChild(el("div", { class: "empty-col-msg", text: "Empty" }));
     } else {
       for (const t of items) {
-        body.appendChild(el("div", { class: "kanban-card", onclick: () => openTask(t.id) },
-          el("div", { style: "font-weight: 600; font-size: 14px; margin-bottom: 12px; color: var(--heading-color);", text: t.title }),
-          el("div", { style: "display: flex; flex-wrap: wrap; gap: 8px; align-items: center;" },
-            statusBadge(t.status),
-            t.current_agent ? el("span", { class: "badge agy", text: agentDisplayName(t.current_agent) }) : null,
-            el("span", { class: "mono faint", style: "font-size: 11px;", text: "iter " + (t.iteration || 0) + "/" + (t.max_iterations || 0) })
-          )
+        const cstate = getCardStateClass(t.status);
+        const card = el("div", { class: `kanban-card ${cstate}`, onclick: () => openTask(t.id) });
+        
+        // Title
+        card.appendChild(el("div", { class: "kcard-title", text: t.title }));
+        
+        // Agent / Status section
+        const agentName = t.current_agent ? agentDisplayName(t.current_agent) : "ForgeFlow";
+        card.appendChild(el("div", { class: "kcard-agent" },
+          el("span", { class: `kcard-dot ${cstate}` }),
+          el("span", { text: agentName })
         ));
+        
+        // Current state label
+        const statusMeta = STATUS_META[t.status] || { label: t.status };
+        card.appendChild(el("div", { class: "kcard-status-lbl", text: statusMeta.label }));
+        
+        // Footer (iter, time)
+        const footer = el("div", { class: "kcard-footer mono" });
+        if (t.iteration && t.max_iterations) {
+          footer.appendChild(el("span", { text: `Iter ${t.iteration}/${t.max_iterations}` }));
+        } else {
+          footer.appendChild(el("span", { text: "" })); // spacer
+        }
+        footer.appendChild(el("span", { class: "kcard-time", text: formatTime(t) }));
+        
+        card.appendChild(footer);
+        body.appendChild(card);
       }
     }
-    board.appendChild(el("div", { class: "kanban-col" },
-      el("div", { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;" },
+    
+    const colEl = el("div", { class: `kanban-col ${colIsActive ? 'active' : ''}` },
+      el("div", { class: "kanban-col-head" },
         el("h3", { text: col.title }),
-        el("span", { class: "mono faint", style: "font-size: 12px; font-weight: 600;", text: String(items.length) })
+        el("span", { class: "kcol-count", text: String(items.length) })
       ),
       body
-    ));
+    );
+    board.appendChild(colEl);
   }
   wrap.appendChild(board);
   return wrap;
 }
-  
-  /* ---------- view: Activity ---------- */
+    
+    /* ---------- view: Activity ---------- */
 const EVENT_TONE = {
   STATE_CHANGED: "info", TASK_STARTED: "ok", TASK_COMPLETED: "ok",
   TASK_FAILED: "err", TASK_STOPPED: "warn", TASK_BLOCKED: "err",
