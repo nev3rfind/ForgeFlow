@@ -54,6 +54,10 @@ class TaskService:
         if error:
             task.error_information = error
 
+        # Set started_at on first transition from PENDING
+        if old_status == TaskState.PENDING and status != TaskState.PENDING and not task.started_at:
+            task.started_at = datetime.now(timezone.utc)
+
         if status in (TaskState.COMPLETED, TaskState.FAILED, TaskState.STOPPED):
             task.completed_at = datetime.now(timezone.utc)
 

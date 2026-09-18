@@ -416,7 +416,16 @@ class AgyProvider(AgentProvider):
 
                     ev_name = event.get("event")
 
-                    if ev_name == "step_update":
+                    if ev_name == "init":
+                        init_data = event.get("init", {})
+                        yield {
+                            "type": "init_info",
+                            "model": init_data.get("model"),
+                            "conversation_id": event.get("conversation_id"),
+                            "cwd": init_data.get("cwd"),
+                        }
+
+                    elif ev_name == "step_update":
                         step = event.get("step_update", {})
                         step_type = step.get("step_type")
                         state = step.get("state")
@@ -425,6 +434,16 @@ class AgyProvider(AgentProvider):
                             content = step.get("content", "")
                             if content:
                                 yield {"type": "text", "content": content}
+
+                        elif step_type == "agent_response" and state == "DONE":
+                            usage = step.get("usage")
+                            duration = step.get("duration_seconds")
+                            if usage or duration:
+                                yield {
+                                    "type": "step_telemetry",
+                                    "usage": usage,
+                                    "duration_seconds": duration,
+                                }
 
                         elif step_type == "tool" and state == "ACTIVE":
                             tool_info = step.get("tool_info", {})
@@ -444,6 +463,16 @@ class AgyProvider(AgentProvider):
                         if res.get("status") == "ERROR":
                             raise AgyProviderError(f"CLI Error: {res.get('error', 'Unknown')}")
                         yield {"type": "__raw_result__", "data": res}
+                        # Yield telemetry from the result event
+                        usage = res.get("usage")
+                        if usage or res.get("duration_seconds") or res.get("model"):
+                            yield {
+                                "type": "result_telemetry",
+                                "model": res.get("model"),
+                                "duration_seconds": res.get("duration_seconds"),
+                                "num_turns": res.get("num_turns"),
+                                "usage": usage,
+                            }
 
                 await process.wait()
 
@@ -517,7 +546,7 @@ class AgyProvider(AgentProvider):
             if event["type"] == "text":
                 final_text += event.get("content", "")
                 yield event
-            elif event["type"] in ("tool_call", "tool_result", "diagnostic"):
+            elif event["type"] in ("tool_call", "tool_result", "diagnostic", "init_info", "step_telemetry", "result_telemetry"):
                 yield event
             elif event["type"] == "__raw_result__":
                 structured_data = event["data"].get("structured_output") or event["data"].get("response")

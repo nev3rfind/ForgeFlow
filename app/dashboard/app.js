@@ -1,7 +1,7 @@
 "use strict";
 
 /* =========================================================================
-   ForgeFlow Command Center - single-page dashboard.
+   ForgeFlow Command Center – Professional Dashboard
    Talks to the FastAPI backend in app/main.py. No build step, no deps.
    ========================================================================= */
 
@@ -67,7 +67,7 @@ async function api(path, opts) {
     try {
       const j = await res.json();
       detail = j.detail || detail;
-    } catch (_) { /* non-JSON error body */ }
+    } catch (_) {}
     throw new Error(res.status + " " + detail);
   }
   const txt = await res.text();
@@ -103,6 +103,7 @@ function shortId(id) {
   return id ? String(id).slice(0, 8) : "-";
 }
 
+/** Format seconds into human-readable duration */
 function dur(seconds) {
   if (seconds === null || seconds === undefined) return "-";
   const s = Math.max(0, Math.round(seconds));
@@ -111,14 +112,28 @@ function dur(seconds) {
   return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }
 
-/* ---------- state machine metadata (mirrors app/models/state.py) ---------- */
+/** Format seconds into a compact live timer display: MM:SS or HH:MM:SS */
+function timerStr(seconds) {
+  if (seconds === null || seconds === undefined || seconds < 0) return "00:00";
+  const s = Math.floor(seconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = String(m).padStart(2, "0");
+  const ss = String(sec).padStart(2, "0");
+  if (h > 0) return String(h).padStart(2, "0") + ":" + mm + ":" + ss;
+  return mm + ":" + ss;
+}
+
+/* ---------- state machine metadata ---------- */
 const STAGES = [
   "PENDING", "PREPARING", "INVESTIGATING", "ROOT_CAUSE_READY", "ROOT_CAUSE_REVIEW",
   "IMPLEMENTING", "IMPLEMENTATION_READY", "TESTING", "QA", "REVIEW",
   "NEEDS_CHANGES", "APPROVED", "COMPLETED"
 ];
-
 const TERMINAL = ["COMPLETED", "FAILED", "STOPPED", "BLOCKED"];
+const ACTIVE_STATES = ["PREPARING", "INVESTIGATING", "ROOT_CAUSE_READY", "ROOT_CAUSE_REVIEW",
+  "IMPLEMENTING", "IMPLEMENTATION_READY", "TESTING", "QA", "REVIEW", "NEEDS_CHANGES"];
 
 const STATUS_META = {
   PENDING:              { label: "Pending",              tone: "gray"   },
@@ -127,7 +142,7 @@ const STATUS_META = {
   ROOT_CAUSE_READY:     { label: "Root Cause Ready",     tone: "cyan"   },
   ROOT_CAUSE_REVIEW:    { label: "Root Cause Review",    tone: "cyan"   },
   IMPLEMENTING:         { label: "Implementing",         tone: "purple" },
-  IMPLEMENTATION_READY: { label: "Implementation Ready", tone: "purple" },
+  IMPLEMENTATION_READY: { label: "Impl. Ready",          tone: "purple" },
   TESTING:              { label: "Testing",              tone: "amber"  },
   QA:                   { label: "QA",                   tone: "amber"  },
   REVIEW:               { label: "In Review",            tone: "amber"  },
@@ -140,7 +155,6 @@ const STATUS_META = {
   PAUSED:               { label: "Paused",               tone: "gray"   }
 };
 
-/* Kanban columns: each display column maps to the backend states it holds. */
 const KANBAN = [
   { key: "queued",      title: "Queued",      states: ["PENDING", "PREPARING"] },
   { key: "investigate", title: "Investigate", states: ["INVESTIGATING", "ROOT_CAUSE_READY", "ROOT_CAUSE_REVIEW"] },
@@ -154,7 +168,6 @@ function statusBadge(status) {
   const m = STATUS_META[status] || { label: status || "Unknown", tone: "gray" };
   return el("span", { class: "badge " + m.tone, text: m.label });
 }
-
 function priorityBadge(p) {
   const key = String(p || "").toLowerCase();
   const tone = { high: "red", medium: "amber", low: "gray" }[key] || "gray";
@@ -172,11 +185,26 @@ const state = {
   selectedTaskId: null,
   taskEvents: [],
   taskArtifacts: [],
+  stateHistory: [],
+  telemetry: {},  // { model, usage: {input_tokens, output_tokens, ...}, duration_seconds, num_turns }
   ws: null,
   wsTaskId: null,
   filters: { search: "", status: "ALL", project: "ALL" },
   loading: false
 };
+
+/* ---------- agent name helpers ---------- */
+function agentDisplayName(agentStr) {
+  if (!agentStr) return null;
+  if (agentStr.toLowerCase().includes("antigravity") || agentStr.toLowerCase().includes("agy")) return "Google Antigravity";
+  if (agentStr.toLowerCase().includes("abacus") || agentStr.toLowerCase().includes("reviewer")) return "Abacus AI";
+  return agentStr;
+}
+function agentRole(agentStr) {
+  if (!agentStr) return null;
+  if (agentStr.toLowerCase().includes("reviewer") || agentStr.toLowerCase().includes("abacus")) return "Reviewer";
+  return "Worker";
+}
 
 /* ---------- navigation ---------- */
 const NAV = [
@@ -265,21 +293,50 @@ function statCard(label, value, sub, tone) {
     sub ? el("div", { class: "stat-sub", text: sub }) : null
   );
 }
-
 function emptyState(icon, msg) {
   return el("div", { class: "empty" },
     el("div", { class: "empty-icon", text: icon }),
     el("div", { text: msg })
   );
 }
-
 function projectName(id) {
   const p = state.projects.filter((x) => x.id === id || x.name === id)[0];
   return p ? p.name : shortId(id);
 }
-
 function taskById(id) {
   return state.tasks.filter((t) => t.id === id)[0] || null;
+}
+
+/* ---------- live timer system ---------- */
+let _timerInterval = null;
+
+function startTimerTick() {
+  if (_timerInterval) return;
+  _timerInterval = setInterval(updateLiveTimers, 1000);
+}
+
+function updateLiveTimers() {
+  // Update all elements with data-timer-since attribute
+  document.querySelectorAll("[data-timer-since]").forEach((el) => {
+    const since = el.getAttribute("data-timer-since");
+    if (!since) return;
+    const d = new Date(since);
+    if (isNaN(d)) return;
+    const elapsed = (Date.now() - d.getTime()) / 1000;
+    el.textContent = timerStr(elapsed);
+  });
+}
+
+function liveTimer(isoSince, extraClass) {
+  if (!isoSince) return el("span", { class: "timer-live " + (extraClass || ""), text: "--:--" });
+  const d = new Date(isoSince);
+  if (isNaN(d)) return el("span", { class: "timer-live " + (extraClass || ""), text: "--:--" });
+  const elapsed = (Date.now() - d.getTime()) / 1000;
+  return el("span", {
+    class: "timer-live " + (extraClass || ""),
+    text: timerStr(elapsed),
+    "data-timer-since": isoSince
+  });
 }
 
 /* ---------- view: Overview ---------- */
@@ -297,6 +354,7 @@ function viewOverview() {
 
   const wrap = el("div", {});
 
+  /* KPI cards */
   wrap.appendChild(el("div", { class: "grid cols-4 mb" },
     statCard("Total Tasks", total, (o.projects || 0) + " projects", ""),
     statCard("Active", active, (o.queued_tasks || 0) + " queued", active ? "info" : ""),
@@ -310,6 +368,34 @@ function viewOverview() {
     statCard("Awaiting Review", o.awaiting_review || 0, "in REVIEW state", (o.awaiting_review || 0) ? "warn" : ""),
     statCard("Projects", o.projects || 0, "registered", "")
   ));
+
+  /* Active tasks - Mission Control summary */
+  const running = state.tasks.filter((t) => ACTIVE_STATES.indexOf(t.status) !== -1);
+  if (running.length > 0) {
+    const activeCard = el("div", { class: "card pad-0 mb" },
+      el("div", { class: "card-head" },
+        el("h3", { text: "Active Tasks" }),
+        el("div", { class: "spacer" }),
+        el("span", { class: "badge blue", text: running.length + " running" })
+      )
+    );
+    const ab = el("div", { class: "card-body" });
+    for (const t of running) {
+      const agent = agentDisplayName(t.current_agent);
+      ab.appendChild(el("div", { class: "kv", style: "cursor:pointer", onclick: () => { go("mission"); selectMissionTask(t.id); } },
+        el("div", { class: "k" },
+          el("strong", { text: t.title }),
+          el("span", { style: "margin-left:12px" }, statusBadge(t.status)),
+          agent ? el("span", { class: "agent-badge", text: agent, style: "margin-left:8px" }) : null
+        ),
+        el("div", { class: "v" },
+          t.started_at ? liveTimer(t.started_at) : el("span", { class: "faint", text: "-" })
+        )
+      ));
+    }
+    activeCard.appendChild(ab);
+    wrap.appendChild(activeCard);
+  }
 
   const cols = el("div", { class: "grid cols-2" });
 
@@ -358,15 +444,19 @@ function viewOverview() {
   }
   recent.appendChild(recentBody);
   cols.appendChild(recent);
-
   wrap.appendChild(cols);
 
-  /* reviewer / provider health */
+  /* System health + provider info */
   const cfg = state.config || {};
   const health = el("div", { class: "card pad-0 mt" },
     el("div", { class: "card-head" }, el("h3", { text: "System" }))
   );
   const hb = el("div", { class: "card-body" });
+  const providerName = cfg.implementation_provider === "agy" ? "Google Antigravity (agy CLI)" : (cfg.implementation_provider || "antigravity");
+  hb.appendChild(el("div", { class: "kv" },
+    el("div", { class: "k", text: "Worker Provider" }),
+    el("div", { class: "v" }, el("span", { class: "agent-badge", text: providerName }))
+  ));
   hb.appendChild(el("div", { class: "kv" },
     el("div", { class: "k", text: "Abacus Reviewer" }),
     el("div", { class: "v" }, el("span", { class: "badge " + (cfg.abacus_reviewer_enabled ? "green" : "gray"), text: cfg.abacus_reviewer_enabled ? "Enabled" : "Disabled" }))
@@ -380,8 +470,8 @@ function viewOverview() {
     el("div", { class: "v" }, el("span", { class: "badge " + (cfg.abacus_fallback_enabled ? "amber" : "gray"), text: cfg.abacus_fallback_enabled ? "Enabled" : "Disabled" }))
   ));
   hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Implementation Provider" }),
-    el("div", { class: "v mono", text: cfg.implementation_provider || "antigravity" })
+    el("div", { class: "k", text: "Abacus Usage" }),
+    el("div", { class: "v faint", text: "Not exposed by current integration" })
   ));
   health.appendChild(hb);
   wrap.appendChild(health);
@@ -392,28 +482,19 @@ function viewOverview() {
 /* ---------- view: Projects ---------- */
 function viewProjects() {
   const wrap = el("div", {});
-
-  const bar = el("div", { class: "toolbar" },
+  wrap.appendChild(el("div", { class: "toolbar" },
     el("div", { class: "spacer" }),
     el("button", { class: "btn primary", text: "+ New Project", onclick: openNewProject })
-  );
-  wrap.appendChild(bar);
-
+  ));
   if (!state.projects.length) {
     wrap.appendChild(el("div", { class: "card" }, emptyState("\u25A4", "No projects yet. Create one to get started.")));
     return wrap;
   }
-
   const card = el("div", { class: "card pad-0" });
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", { text: "Name" }),
-      el("th", { text: "Type" }),
-      el("th", { text: "Repository" }),
-      el("th", { text: "Test Command" }),
-      el("th", { text: "Tasks" }),
-      el("th", { text: "Created" }),
-      el("th", { text: "" })
+      el("th", { text: "Name" }), el("th", { text: "Type" }), el("th", { text: "Repository" }),
+      el("th", { text: "Test Command" }), el("th", { text: "Tasks" }), el("th", { text: "Created" }), el("th", { text: "" })
     ))
   );
   const tbody = el("tbody", {});
@@ -430,8 +511,7 @@ function viewProjects() {
         el("div", { class: "flex" },
           el("button", { class: "btn sm", text: "Tasks", onclick: () => { state.filters.project = p.id; go("tasks"); } }),
           el("button", { class: "btn sm", text: "New Task", onclick: () => openNewTask(p.id) })
-        )
-      )
+        ))
     ));
   }
   table.appendChild(tbody);
@@ -458,69 +538,56 @@ function filteredTasks() {
 function viewTasks() {
   const wrap = el("div", {});
   const f = state.filters;
-
-  const search = el("input", {
-    class: "search",
-    placeholder: "Search tasks...",
-    value: f.search,
+  const search = el("input", { class: "search", placeholder: "Search tasks...", value: f.search,
     oninput: (e) => { f.search = e.target.value; render(); }
   });
-
   const statusSel = el("select", { class: "search", onchange: (e) => { f.status = e.target.value; render(); } },
     el("option", { value: "ALL", text: "All statuses" }),
     Object.keys(STATUS_META).map((s) => el("option", { value: s, text: STATUS_META[s].label, selected: f.status === s ? "selected" : null }))
   );
-
   const projSel = el("select", { class: "search", onchange: (e) => { f.project = e.target.value; render(); } },
     el("option", { value: "ALL", text: "All projects" }),
     state.projects.map((p) => el("option", { value: p.id, text: p.name, selected: f.project === p.id ? "selected" : null }))
   );
-
   wrap.appendChild(el("div", { class: "toolbar" },
-    search,
-    statusSel,
-    projSel,
+    search, statusSel, projSel,
     el("button", { class: "btn sm ghost", text: "Clear", onclick: () => { state.filters = { search: "", status: "ALL", project: "ALL" }; render(); } }),
     el("div", { class: "spacer" }),
     el("button", { class: "btn primary", text: "+ New Task", onclick: () => openNewTask(null) })
   ));
-
   const rows = filteredTasks();
   if (!rows.length) {
     wrap.appendChild(el("div", { class: "card" }, emptyState("\u2630", state.tasks.length ? "No tasks match these filters." : "No tasks yet.")));
     return wrap;
   }
-
   const card = el("div", { class: "card pad-0" });
   const table = el("table", {},
     el("thead", {}, el("tr", {},
-      el("th", { text: "Title" }),
-      el("th", { text: "Project" }),
-      el("th", { text: "Status" }),
-      el("th", { text: "Priority" }),
-      el("th", { text: "Iter" }),
-      el("th", { text: "Updated" }),
-      el("th", { text: "" })
+      el("th", { text: "Title" }), el("th", { text: "Project" }), el("th", { text: "Status" }),
+      el("th", { text: "Agent" }), el("th", { text: "Iter" }), el("th", { text: "Elapsed" }), el("th", { text: "" })
     ))
   );
   const tbody = el("tbody", {});
   for (const t of rows) {
+    const isActive = ACTIVE_STATES.indexOf(t.status) !== -1;
     tbody.appendChild(el("tr", {},
       el("td", {},
         el("div", { style: "font-weight:600", text: t.title }),
         el("div", { class: "mono faint", text: shortId(t.id) })
       ),
-      el("td", { class: "muted", text: projectName(t.project_id) }),
+      el("td", { class: "faint", text: projectName(t.project_id) }),
       el("td", {}, statusBadge(t.status)),
-      el("td", {}, priorityBadge(t.priority)),
+      el("td", {}, t.current_agent ? el("span", { class: "agent-badge", text: agentDisplayName(t.current_agent) }) : el("span", { class: "faint", text: "-" })),
       el("td", { class: "mono", text: (t.iteration || 0) + "/" + (t.max_iterations || 0) }),
-      el("td", { class: "faint nowrap", text: ago(t.updated_at) }),
+      el("td", {}, isActive && t.started_at ? liveTimer(t.started_at) : el("span", { class: "faint", text: ago(t.updated_at) })),
       el("td", {},
         el("div", { class: "flex" },
           el("button", { class: "btn sm", text: "Open", onclick: () => openTask(t.id) }),
-          el("button", { class: "btn sm primary", text: "Run", onclick: () => runTask(t.id) })
-        )
-      )
+          el("button", { class: "btn sm primary", text: isActive ? "Mission" : "Run", onclick: () => {
+            if (isActive) { go("mission"); selectMissionTask(t.id); }
+            else runTask(t.id);
+          }})
+        ))
     ));
   }
   table.appendChild(tbody);
@@ -533,12 +600,8 @@ function viewTasks() {
 function viewKanban() {
   const wrap = el("div", {});
   const rows = filteredTasks();
-
   wrap.appendChild(el("div", { class: "toolbar" },
-    el("input", {
-      class: "search",
-      placeholder: "Search tasks...",
-      value: state.filters.search,
+    el("input", { class: "search", placeholder: "Search tasks...", value: state.filters.search,
       oninput: (e) => { state.filters.search = e.target.value; render(); }
     }),
     el("select", { class: "search", onchange: (e) => { state.filters.project = e.target.value; render(); } },
@@ -548,7 +611,6 @@ function viewKanban() {
     el("div", { class: "spacer" }),
     el("span", { class: "faint mono", text: rows.length + " tasks" })
   ));
-
   const board = el("div", { class: "kanban" });
   for (const col of KANBAN) {
     const items = rows.filter((t) => col.states.indexOf(t.status) !== -1);
@@ -561,8 +623,7 @@ function viewKanban() {
           el("div", { class: "kcard-title", text: t.title }),
           el("div", { class: "kcard-meta" },
             statusBadge(t.status),
-            priorityBadge(t.priority),
-            el("span", { text: projectName(t.project_id) }),
+            t.current_agent ? el("span", { class: "agent-badge", text: agentDisplayName(t.current_agent) }) : null,
             el("span", { text: "iter " + (t.iteration || 0) + "/" + (t.max_iterations || 0) })
           )
         ));
@@ -582,32 +643,34 @@ function viewKanban() {
 
 /* ---------- view: Activity ---------- */
 const EVENT_TONE = {
-  STATE_CHANGED: "info",
-  TASK_STARTED: "ok",
-  TASK_COMPLETED: "ok",
-  TASK_FAILED: "err",
-  TASK_STOPPED: "warn",
-  TASK_BLOCKED: "err",
-  TEST_RESULT: "warn",
-  REVIEW_RESULT: "agent",
-  AGENT_MESSAGE: "agent",
-  ARTIFACT_CREATED: "info",
-  ERROR: "err"
+  STATE_CHANGED: "info", TASK_STARTED: "ok", TASK_COMPLETED: "ok",
+  TASK_FAILED: "err", TASK_STOPPED: "warn", TASK_BLOCKED: "err",
+  TEST_RESULT: "warn", REVIEW_RESULT: "agent", AGENT_MESSAGE: "agent",
+  ARTIFACT_CREATED: "info", ARTIFACT: "info", ERROR: "err",
+  REVIEW_SKIPPED: "info", REVIEWER_FALLBACK: "warn"
 };
 
 function eventSummary(e) {
   const p = e.payload || {};
   switch (e.event_type) {
     case "STATE_CHANGED":
-      return (p.old_status || "?") + " → " + (p.new_status || "?") + (p.error ? "  [Error: " + p.error + "]" : (p.reason ? "  (" + p.reason + ")" : ""));
+      return (p.old_status || "?") + " \u2192 " + (p.new_status || "?") + (p.agent ? "  [" + agentDisplayName(p.agent) + "]" : "");
     case "TEST_RESULT":
       return "exit " + p.exit_code + (p.command ? "  " + p.command : "");
     case "REVIEW_RESULT":
       return (p.decision || "?") + (p.summary ? "  " + p.summary : "");
-    case "AGENT_MESSAGE":
-      return (p.role ? p.role + ": " : "") + (p.message || p.content || "");
-    case "ARTIFACT_CREATED":
-      return (p.kind || "artifact") + "  " + (p.path || p.name || "");
+    case "AGENT_CHUNK": {
+      const tp = p.type || "";
+      if (tp === "init_info") return "Model: " + (p.model || "unknown");
+      if (tp === "result_telemetry") return "Tokens: " + ((p.usage && p.usage.total_tokens) || "n/a");
+      if (tp === "tool_call") return "Tool: " + (p.name || "?");
+      if (tp === "text") return (p.content || "").slice(0, 80);
+      if (tp === "structured_output") return "Result received";
+      return tp;
+    }
+    case "ARTIFACT": return (p.name || "artifact");
+    case "REVIEW_SKIPPED": return p.reason || "skipped";
+    case "REVIEWER_FALLBACK": return "Fallback: " + (p.fallback_agent || "?");
     default: {
       const keys = Object.keys(p);
       if (!keys.length) return "";
@@ -618,8 +681,13 @@ function eventSummary(e) {
 
 function logLine(e) {
   const tone = EVENT_TONE[e.event_type] || "";
+  const p = e.payload || {};
+  const agent = (e.event_type === "STATE_CHANGED" && p.agent) ? agentDisplayName(p.agent) :
+                (e.event_type === "AGENT_CHUNK" && p.type === "init_info") ? "Agy" : null;
+
   return el("div", { class: "log-line " + tone },
     el("span", { class: "log-time", text: fmtTime(e.created_at || e.timestamp) }),
+    agent ? el("span", { class: "log-agent", text: agent }) : null,
     el("span", { class: "log-type", text: e.event_type }),
     el("span", { class: "log-msg", text: eventSummary(e) })
   );
@@ -628,13 +696,11 @@ function logLine(e) {
 function viewActivity() {
   const wrap = el("div", {});
   const events = state.activity.slice().reverse();
-
   wrap.appendChild(el("div", { class: "toolbar" },
     el("span", { class: "faint mono", text: events.length + " events" }),
     el("div", { class: "spacer" }),
     el("button", { class: "btn sm", text: "Refresh", onclick: refresh })
   ));
-
   const card = el("div", { class: "card pad-0" },
     el("div", { class: "card-head" }, el("h3", { text: "Event Stream" }))
   );
@@ -654,7 +720,6 @@ function viewActivity() {
 /* ---------- view: Mission Control ---------- */
 function viewMission() {
   const wrap = el("div", {});
-
   const sel = el("select", { class: "search", onchange: (e) => selectMissionTask(e.target.value) },
     el("option", { value: "", text: "-- select a task --" }),
     state.tasks.map((t) => el("option", {
@@ -663,30 +728,65 @@ function viewMission() {
       selected: state.selectedTaskId === t.id ? "selected" : null
     }))
   );
-
   wrap.appendChild(el("div", { class: "toolbar" },
-    el("span", { class: "faint", text: "Task:" }),
-    sel,
+    el("span", { class: "faint", text: "Task:" }), sel,
     el("div", { class: "spacer" }),
     state.selectedTaskId ? el("button", { class: "btn sm", text: "Refresh", onclick: () => selectMissionTask(state.selectedTaskId) }) : null
   ));
-
   if (!state.selectedTaskId) {
     wrap.appendChild(el("div", { class: "card" }, emptyState("\u25CE", "Select a task to open Mission Control.")));
     return wrap;
   }
-
   const t = taskById(state.selectedTaskId);
   if (!t) {
     wrap.appendChild(el("div", { class: "card" }, emptyState("\u25CE", "Task not found.")));
     return wrap;
   }
 
+  const isTerminal = TERMINAL.indexOf(t.status) !== -1;
+  const isActive = ACTIVE_STATES.indexOf(t.status) !== -1;
+
+  /* ===== Task Header Hero ===== */
+  const agent = agentDisplayName(t.current_agent);
+  const role = agentRole(t.current_agent);
+
+  const heroLeft = el("div", {},
+    el("h2", { style: "margin:0 0 4px 0;font-size:1.25rem", text: t.title }),
+    el("div", { class: "flex", style: "gap:8px;align-items:center;flex-wrap:wrap" },
+      statusBadge(t.status),
+      agent ? el("span", { class: "agent-badge", text: (role ? role + ": " : "") + agent }) : null,
+      el("span", { class: "mono faint", text: shortId(t.id) })
+    )
+  );
+  const heroRight = el("div", { style: "text-align:right;min-width:180px" });
+  if (t.started_at) {
+    heroRight.appendChild(el("div", { class: "stat-label", text: "Elapsed" }));
+    heroRight.appendChild(liveTimer(t.started_at, "hero-timer"));
+  }
+  // Current state timer
+  const lastStateEntry = getLastStateEntryTime();
+  if (lastStateEntry && isActive) {
+    heroRight.appendChild(el("div", { class: "stat-label", style: "margin-top:8px", text: STATUS_META[t.status] ? STATUS_META[t.status].label : t.status }));
+    heroRight.appendChild(liveTimer(lastStateEntry, ""));
+  }
+  heroRight.appendChild(el("div", { style: "margin-top:8px" },
+    el("span", { class: "stat-label", text: "Started: " }),
+    el("span", { class: "mono", text: fmtTime(t.started_at) })
+  ));
+  heroRight.appendChild(el("div", {},
+    el("span", { class: "stat-label", text: "Iteration: " }),
+    el("span", { class: "mono", text: (t.iteration || 0) + " / " + (t.max_iterations || 0) })
+  ));
+
+  const hero = el("div", { class: "task-header-hero mb" }, heroLeft, heroRight);
+  wrap.appendChild(hero);
+
   const grid = el("div", { class: "mc-grid" });
 
-  /* left: stage rail + task detail */
+  /* ===== Left column ===== */
   const left = el("div", {});
 
+  /* Pipeline + State Timeline */
   const railCard = el("div", { class: "card pad-0 mb" },
     el("div", { class: "card-head" },
       el("h3", { text: "Pipeline" }),
@@ -695,37 +795,112 @@ function viewMission() {
     )
   );
   const railBody = el("div", { class: "card-body" });
+
+  // Build state durations from state history
+  const historyMap = {};
+  for (const h of state.stateHistory) {
+    historyMap[h.state] = h;
+  }
+
   const rail = el("div", { class: "stage-rail" });
   const curIdx = STAGES.indexOf(t.status);
-  const isTerminal = TERMINAL.indexOf(t.status) !== -1;
   for (let i = 0; i < STAGES.length; i++) {
     const s = STAGES[i];
     let cls = "stage";
     if (isTerminal) {
       if (s === t.status) cls += " fail";
-      else if (curIdx === -1) cls += "";
     } else if (i < curIdx) cls += " done";
     else if (i === curIdx) cls += " current";
+
+    const hEntry = historyMap[s];
+    let durNode = null;
+    if (hEntry && hEntry.duration_seconds !== null && hEntry.duration_seconds !== undefined) {
+      durNode = el("span", { class: "stage-dur", text: dur(hEntry.duration_seconds) });
+    } else if (i === curIdx && !isTerminal && lastStateEntry) {
+      durNode = liveTimer(lastStateEntry, "stage-dur");
+    }
+
     rail.appendChild(el("div", { class: cls },
       el("span", { class: "sdot" }),
-      el("span", { text: STATUS_META[s] ? STATUS_META[s].label : s })
+      el("span", { class: "slabel", text: STATUS_META[s] ? STATUS_META[s].label : s }),
+      durNode
     ));
   }
   railBody.appendChild(rail);
   railCard.appendChild(railBody);
   left.appendChild(railCard);
 
+  /* Telemetry card */
+  const telCard = el("div", { class: "card pad-0 mb" },
+    el("div", { class: "card-head" }, el("h3", { text: "Telemetry" }))
+  );
+  const tb = el("div", { class: "card-body" });
+  const tel = state.telemetry;
+  if (tel.model) {
+    tb.appendChild(el("div", { class: "kv" },
+      el("div", { class: "k", text: "Model" }),
+      el("div", { class: "v mono", text: tel.model })
+    ));
+  }
+  if (tel.usage) {
+    const u = tel.usage;
+    if (u.input_tokens !== undefined) {
+      tb.appendChild(el("div", { class: "kv" },
+        el("div", { class: "k", text: "Input Tokens" }),
+        el("div", { class: "v mono", text: Number(u.input_tokens).toLocaleString() })
+      ));
+    }
+    if (u.output_tokens !== undefined) {
+      tb.appendChild(el("div", { class: "kv" },
+        el("div", { class: "k", text: "Output Tokens" }),
+        el("div", { class: "v mono", text: Number(u.output_tokens).toLocaleString() })
+      ));
+    }
+    if (u.thinking_tokens !== undefined && u.thinking_tokens > 0) {
+      tb.appendChild(el("div", { class: "kv" },
+        el("div", { class: "k", text: "Thinking Tokens" }),
+        el("div", { class: "v mono", text: Number(u.thinking_tokens).toLocaleString() })
+      ));
+    }
+    if (u.total_tokens !== undefined) {
+      tb.appendChild(el("div", { class: "kv" },
+        el("div", { class: "k", text: "Total Tokens" }),
+        el("div", { class: "v mono", text: Number(u.total_tokens).toLocaleString() })
+      ));
+    }
+    tb.appendChild(el("div", { class: "kv" },
+      el("div", { class: "k", text: "Source" }),
+      el("div", { class: "v faint", text: "reported by provider" })
+    ));
+  } else {
+    tb.appendChild(el("div", { class: "faint", style: "padding:8px 0", text: "Token usage unavailable from current provider" }));
+  }
+  if (tel.duration_seconds) {
+    tb.appendChild(el("div", { class: "kv" },
+      el("div", { class: "k", text: "Provider Duration" }),
+      el("div", { class: "v mono", text: dur(tel.duration_seconds) })
+    ));
+  }
+  if (tel.num_turns) {
+    tb.appendChild(el("div", { class: "kv" },
+      el("div", { class: "k", text: "Turns" }),
+      el("div", { class: "v mono", text: String(tel.num_turns) })
+    ));
+  }
+  telCard.appendChild(tb);
+  left.appendChild(telCard);
+
+  /* Task Detail */
   const detail = el("div", { class: "card pad-0" },
     el("div", { class: "card-head" }, el("h3", { text: "Task Detail" }))
   );
   const db = el("div", { class: "card-body" });
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Title" }), el("div", { class: "v", text: t.title })));
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "ID" }), el("div", { class: "v mono", text: t.id })));
   db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Project" }), el("div", { class: "v", text: projectName(t.project_id) })));
   db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Priority" }), el("div", { class: "v" }, priorityBadge(t.priority))));
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Iteration" }), el("div", { class: "v mono", text: (t.iteration || 0) + " / " + (t.max_iterations || 0) })));
   db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Created" }), el("div", { class: "v", text: fmtDateTime(t.created_at) })));
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Updated" }), el("div", { class: "v", text: fmtDateTime(t.updated_at) })));
+  if (t.completed_at) {
+    db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Completed" }), el("div", { class: "v", text: fmtDateTime(t.completed_at) })));
+  }
   if (t.description) {
     db.appendChild(el("div", { class: "mt" },
       el("div", { class: "stat-label mb", text: "Description" }),
@@ -735,37 +910,37 @@ function viewMission() {
   if (t.error_information) {
     db.appendChild(el("div", { class: "mt" },
       el("div", { class: "stat-label mb", text: "Error" }),
-      el("div", { class: "pre", style: "border-color:rgba(255,92,92,.4)", text: t.error_information })
+      el("div", { class: "pre err-pre", text: t.error_information })
     ));
   }
   detail.appendChild(db);
   left.appendChild(detail);
-
   grid.appendChild(left);
 
-  /* right: controls + live log + artifacts */
+  /* ===== Right column ===== */
   const right = el("div", {});
 
+  /* Controls */
   const ctrl = el("div", { class: "card pad-0 mb" },
     el("div", { class: "card-head" }, el("h3", { text: "Controls" }))
   );
   const cb = el("div", { class: "card-body" });
-  const running = !isTerminal;
   cb.appendChild(el("div", { class: "flex wrap" },
-    el("button", { class: "btn primary", text: "Start", disabled: running ? "disabled" : null, onclick: () => runTask(t.id) }),
-    el("button", { class: "btn danger", text: "Stop", disabled: running ? null : "disabled", onclick: () => stopTask(t.id) }),
+    el("button", { class: "btn primary", text: "Start", disabled: isActive ? "disabled" : null, onclick: () => runTask(t.id) }),
+    el("button", { class: "btn danger", text: "Stop", disabled: isActive ? null : "disabled", onclick: () => stopTask(t.id) }),
     el("button", { class: "btn", text: "Refresh", onclick: () => selectMissionTask(t.id) })
   ));
-  cb.appendChild(el("div", { class: "mt faint", text: running ? "Task is running. Live events stream below." : "Task is idle." }));
+  cb.appendChild(el("div", { class: "mt faint", text: isActive ? "Task is running. Live events stream below." : (isTerminal ? "Task has finished." : "Task is idle.") }));
   ctrl.appendChild(cb);
   right.appendChild(ctrl);
 
+  /* Live Event Stream */
   const logCard = el("div", { class: "card pad-0 mb" },
     el("div", { class: "card-head" },
       el("h3", { text: "Live Event Stream" }),
       el("div", { class: "spacer" }),
       el("span", { class: "dot " + (state.ws && state.ws.readyState === 1 ? "ok" : "warn") }),
-      el("span", { class: "faint mono", text: state.ws && state.ws.readyState === 1 ? "ws" : "poll" })
+      el("span", { class: "faint mono", text: state.ws && state.ws.readyState === 1 ? "live" : "poll" })
     )
   );
   const lb = el("div", { class: "card-body" });
@@ -773,12 +948,19 @@ function viewMission() {
   if (!state.taskEvents.length) {
     log.appendChild(el("div", { class: "faint", text: "No events yet." }));
   } else {
-    for (const e of state.taskEvents) log.appendChild(logLine(e));
+    // Filter out noisy AGENT_CHUNK text events for the log, keep tool calls and state changes
+    for (const e of state.taskEvents) {
+      const p = e.payload || {};
+      if (e.event_type === "AGENT_CHUNK" && p.type === "text") continue;
+      if (e.event_type === "AGENT_CHUNK" && p.type === "step_telemetry") continue;
+      log.appendChild(logLine(e));
+    }
   }
   lb.appendChild(log);
   logCard.appendChild(lb);
   right.appendChild(logCard);
 
+  /* Artifacts */
   const artCard = el("div", { class: "card pad-0" },
     el("div", { class: "card-head" },
       el("h3", { text: "Artifacts" }),
@@ -808,20 +990,33 @@ function viewMission() {
   return wrap;
 }
 
+/** Get the ISO timestamp of when the current state was entered */
+function getLastStateEntryTime() {
+  if (!state.stateHistory.length) return null;
+  const last = state.stateHistory[state.stateHistory.length - 1];
+  return last.entered_at || null;
+}
+
 async function selectMissionTask(id) {
   state.selectedTaskId = id || null;
   state.taskEvents = [];
   state.taskArtifacts = [];
+  state.stateHistory = [];
+  state.telemetry = {};
   closeWs();
   if (!id) { render(); return; }
   render();
   try {
-    const [events, artifacts] = await Promise.all([
+    const [events, artifacts, history] = await Promise.all([
       api("/tasks/" + id + "/events").catch(() => []),
-      api("/tasks/" + id + "/artifacts").catch(() => [])
+      api("/tasks/" + id + "/artifacts").catch(() => []),
+      api("/tasks/" + id + "/state-history").catch(() => [])
     ]);
     state.taskEvents = events || [];
     state.taskArtifacts = artifacts || [];
+    state.stateHistory = history || [];
+    // Extract telemetry from events
+    extractTelemetryFromEvents(events || []);
   } catch (e) {
     toast("Failed to load task detail: " + e.message, "err");
   }
@@ -829,6 +1024,25 @@ async function selectMissionTask(id) {
   openWs(id);
 }
 
+/** Scan events for telemetry data (init_info, result_telemetry) */
+function extractTelemetryFromEvents(events) {
+  state.telemetry = {};
+  for (const e of events) {
+    if (e.event_type !== "AGENT_CHUNK") continue;
+    const p = e.payload || {};
+    if (p.type === "init_info") {
+      if (p.model) state.telemetry.model = p.model;
+    }
+    if (p.type === "result_telemetry") {
+      if (p.model) state.telemetry.model = p.model;
+      if (p.usage) state.telemetry.usage = p.usage;
+      if (p.duration_seconds) state.telemetry.duration_seconds = p.duration_seconds;
+      if (p.num_turns) state.telemetry.num_turns = p.num_turns;
+    }
+  }
+}
+
+/* ---------- WebSocket ---------- */
 function openWs(taskId) {
   try {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";
@@ -841,22 +1055,59 @@ function openWs(taskId) {
       try { msg = JSON.parse(ev.data); } catch (_) { return; }
       if (msg && msg.event_type) {
         state.taskEvents.push(msg);
-        appendLogLine(msg);
+        // Handle telemetry events inline
+        if (msg.event_type === "AGENT_CHUNK" && msg.payload) {
+          const p = msg.payload;
+          if (p.type === "init_info" && p.model) {
+            state.telemetry.model = p.model;
+          }
+          if (p.type === "result_telemetry") {
+            if (p.model) state.telemetry.model = p.model;
+            if (p.usage) state.telemetry.usage = p.usage;
+            if (p.duration_seconds) state.telemetry.duration_seconds = p.duration_seconds;
+            if (p.num_turns) state.telemetry.num_turns = p.num_turns;
+          }
+        }
+        // Filter out text chunks from log
+        const payload = msg.payload || {};
+        if (!(msg.event_type === "AGENT_CHUNK" && (payload.type === "text" || payload.type === "step_telemetry"))) {
+          appendLogLine(msg);
+        }
         if (msg.event_type === "STATE_CHANGED" && msg.payload) {
           const t = taskById(taskId);
           if (t) {
             t.status = msg.payload.new_status || t.status;
             if (msg.payload.agent) t.current_agent = msg.payload.agent;
             if (msg.payload.error) t.error_information = msg.payload.error;
-            if (state.route === "mission" && state.selectedTaskId === taskId) {
-              render();
+          }
+          // Update state history
+          state.stateHistory.push({
+            state: msg.payload.new_status,
+            agent: msg.payload.agent,
+            entered_at: msg.created_at,
+            exited_at: null,
+            duration_seconds: null
+          });
+          // Close previous entry
+          if (state.stateHistory.length > 1) {
+            const prev = state.stateHistory[state.stateHistory.length - 2];
+            if (!prev.exited_at) {
+              prev.exited_at = msg.created_at;
+              const entered = new Date(prev.entered_at);
+              const exited = new Date(prev.exited_at);
+              if (!isNaN(entered) && !isNaN(exited)) {
+                prev.duration_seconds = Math.round((exited - entered) / 1000 * 10) / 10;
+              }
             }
+          }
+          if (state.route === "mission" && state.selectedTaskId === taskId) {
+            render();
           }
         }
       }
     };
     ws.onclose = () => { if (state.ws === ws) state.ws = null; };
-    ws.onerror = () => { /* fall back to polling via Refresh */ };
+    ws.onerror = () => {};
   } catch (_) {
     state.ws = null;
   }
@@ -864,7 +1115,7 @@ function openWs(taskId) {
 
 function closeWs() {
   if (state.ws) {
-    try { state.ws.close(); } catch (_) { /* already closed */ }
+    try { state.ws.close(); } catch (_) {}
     state.ws = null;
   }
   state.wsTaskId = null;
@@ -882,7 +1133,6 @@ function appendLogLine(e) {
 function viewSettings() {
   const wrap = el("div", {});
   const cfg = state.config || {};
-
   const card = el("div", { class: "card pad-0 mb" },
     el("div", { class: "card-head" },
       el("h3", { text: "Runtime Configuration" }),
@@ -926,7 +1176,8 @@ function viewSettings() {
     ["POST", "/tasks/{id}/start"], ["POST", "/tasks/{id}/stop"],
     ["POST", "/tasks/{id}/pause"], ["POST", "/tasks/{id}/resume"],
     ["POST", "/tasks/{id}/retry"], ["POST", "/tasks/{id}/cancel"],
-    ["GET", "/tasks/{id}/events"], ["GET", "/tasks/{id}/artifacts"],
+    ["GET", "/tasks/{id}/events"], ["GET", "/tasks/{id}/state-history"],
+    ["GET", "/tasks/{id}/artifacts"],
     ["GET", "/artifacts/{id}/content"], ["GET", "/activity"],
     ["WS", "/ws/tasks/{id}"]
   ];
@@ -942,9 +1193,7 @@ function viewSettings() {
 }
 
 /* ---------- modals ---------- */
-function closeModal() {
-  $("#modal-root").innerHTML = "";
-}
+function closeModal() { $("#modal-root").innerHTML = ""; }
 
 function openModal(title, bodyNode, footNodes, wide) {
   const root = $("#modal-root");
@@ -967,15 +1216,11 @@ function openNewProject() {
   const name = el("input", { placeholder: "my-project" });
   const repository = el("input", { placeholder: "C:\\path\\to\\repo" });
   const type = el("select", {},
-    el("option", { value: "python", text: "python" }),
-    el("option", { value: "javascript", text: "javascript" }),
-    el("option", { value: "typescript", text: "typescript" }),
-    el("option", { value: "go", text: "go" }),
-    el("option", { value: "rust", text: "rust" }),
-    el("option", { value: "java", text: "java" })
+    el("option", { value: "python", text: "python" }), el("option", { value: "javascript", text: "javascript" }),
+    el("option", { value: "typescript", text: "typescript" }), el("option", { value: "go", text: "go" }),
+    el("option", { value: "rust", text: "rust" }), el("option", { value: "java", text: "java" })
   );
   const test = el("input", { placeholder: "pytest -q" });
-
   const body = el("div", {},
     el("div", { class: "field" }, el("label", { text: "Name" }), name),
     el("div", { class: "field" }, el("label", { text: "Repository Path" }), repository, el("div", { class: "hint", text: "Absolute path to the local git repository." })),
@@ -984,27 +1229,13 @@ function openNewProject() {
       el("div", { class: "field" }, el("label", { text: "Test Command" }), test)
     )
   );
-
   const submit = async () => {
-    if (!name.value.trim() || !repository.value.trim()) {
-      toast("Name and repository path are required", "err");
-      return;
-    }
+    if (!name.value.trim() || !repository.value.trim()) { toast("Name and repository path are required", "err"); return; }
     try {
-      await api("/projects", { method: "POST", body: {
-        name: name.value.trim(),
-        repository: repository.value.trim(),
-        type: type.value,
-        test_command: test.value.trim() || null
-      } });
-      closeModal();
-      toast("Project created", "ok");
-      await loadAll();
-    } catch (e) {
-      toast("Create failed: " + e.message, "err");
-    }
+      await api("/projects", { method: "POST", body: { name: name.value.trim(), repository: repository.value.trim(), type: type.value, test_command: test.value.trim() || null } });
+      closeModal(); toast("Project created", "ok"); await loadAll();
+    } catch (e) { toast("Create failed: " + e.message, "err"); }
   };
-
   openModal("New Project", body, [
     el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
     el("button", { class: "btn primary", text: "Create", onclick: submit })
@@ -1018,12 +1249,9 @@ function openNewTask(projectId) {
     state.projects.map((p) => el("option", { value: p.id, text: p.name, selected: projectId === p.id ? "selected" : null }))
   );
   const prio = el("select", {},
-    el("option", { value: "medium", text: "medium" }),
-    el("option", { value: "high", text: "high" }),
-    el("option", { value: "low", text: "low" })
+    el("option", { value: "medium", text: "medium" }), el("option", { value: "high", text: "high" }), el("option", { value: "low", text: "low" })
   );
   const maxIter = el("input", { type: "number", value: "3", min: "1", max: "10" });
-
   const body = el("div", {},
     el("div", { class: "field" }, el("label", { text: "Title" }), title),
     el("div", { class: "field" }, el("label", { text: "Description" }), desc),
@@ -1033,26 +1261,17 @@ function openNewTask(projectId) {
       el("div", { class: "field" }, el("label", { text: "Max Iterations" }), maxIter)
     )
   );
-
   const submit = async () => {
     if (!title.value.trim()) { toast("Title is required", "err"); return; }
     if (!proj.value) { toast("Create a project first", "err"); return; }
     try {
       await api("/tasks", { method: "POST", body: {
-        title: title.value.trim(),
-        description: desc.value.trim(),
-        project_id: proj.value,
-        priority: prio.value,
-        max_iterations: parseInt(maxIter.value, 10) || 3
-      } });
-      closeModal();
-      toast("Task created", "ok");
-      await loadAll();
-    } catch (e) {
-      toast("Create failed: " + e.message, "err");
-    }
+        title: title.value.trim(), description: desc.value.trim(), project_id: proj.value,
+        priority: prio.value, max_iterations: parseInt(maxIter.value, 10) || 3
+      }});
+      closeModal(); toast("Task created", "ok"); await loadAll();
+    } catch (e) { toast("Create failed: " + e.message, "err"); }
   };
-
   openModal("New Task", body, [
     el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
     el("button", { class: "btn primary", text: "Create", onclick: submit })
@@ -1062,8 +1281,7 @@ function openNewTask(projectId) {
 async function openTask(id) {
   const t = taskById(id);
   if (!t) { toast("Task not found", "err"); return; }
-  let events = [];
-  let artifacts = [];
+  let events = [], artifacts = [];
   try {
     const r = await Promise.all([
       api("/tasks/" + id + "/events").catch(() => []),
@@ -1071,16 +1289,17 @@ async function openTask(id) {
     ]);
     events = r[0] || [];
     artifacts = r[1] || [];
-  } catch (_) { /* detail is best-effort */ }
+  } catch (_) {}
 
   const body = el("div", {},
     el("div", { class: "kv" }, el("div", { class: "k", text: "Status" }), el("div", { class: "v" }, statusBadge(t.status))),
+    el("div", { class: "kv" }, el("div", { class: "k", text: "Agent" }), el("div", { class: "v" }, t.current_agent ? el("span", { class: "agent-badge", text: agentDisplayName(t.current_agent) }) : el("span", { class: "faint", text: "-" }))),
     el("div", { class: "kv" }, el("div", { class: "k", text: "Project" }), el("div", { class: "v", text: projectName(t.project_id) })),
     el("div", { class: "kv" }, el("div", { class: "k", text: "Priority" }), el("div", { class: "v" }, priorityBadge(t.priority))),
     el("div", { class: "kv" }, el("div", { class: "k", text: "Iteration" }), el("div", { class: "v mono", text: (t.iteration || 0) + " / " + (t.max_iterations || 0) })),
     el("div", { class: "kv" }, el("div", { class: "k", text: "Updated" }), el("div", { class: "v", text: fmtDateTime(t.updated_at) })),
     t.description ? el("div", { class: "mt" }, el("div", { class: "stat-label mb", text: "Description" }), el("div", { class: "pre", text: t.description })) : null,
-    t.error_information ? el("div", { class: "mt" }, el("div", { class: "stat-label mb", text: "Error" }), el("div", { class: "pre", text: t.error_information })) : null,
+    t.error_information ? el("div", { class: "mt" }, el("div", { class: "stat-label mb", text: "Error" }), el("div", { class: "pre err-pre", text: t.error_information })) : null,
     el("div", { class: "mt" },
       el("div", { class: "stat-label mb", text: "Recent Events (" + events.length + ")" }),
       events.length
@@ -1112,9 +1331,7 @@ async function runTask(id) {
     toast("Task started", "ok");
     await loadAll();
     if (state.route === "mission") selectMissionTask(id);
-  } catch (e) {
-    toast("Run failed: " + e.message, "err");
-  }
+  } catch (e) { toast("Run failed: " + e.message, "err"); }
 }
 
 async function stopTask(id) {
@@ -1123,9 +1340,7 @@ async function stopTask(id) {
     toast("Stop requested", "ok");
     await loadAll();
     if (state.route === "mission") selectMissionTask(id);
-  } catch (e) {
-    toast("Stop failed: " + e.message, "err");
-  }
+  } catch (e) { toast("Stop failed: " + e.message, "err"); }
 }
 
 /* ---------- render ---------- */
@@ -1157,6 +1372,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
   tickClock();
   setInterval(tickClock, 1000);
+  startTimerTick();
   renderNav();
   render();
   loadAll();

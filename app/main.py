@@ -284,6 +284,37 @@ async def cancel_task(task_id: str):
 def get_events(task_id: str):
     return repo.get_events(task_id)
 
+@app.get("/tasks/{task_id}/state-history")
+def get_state_history(task_id: str):
+    """Compute per-state durations from STATE_CHANGED events."""
+    events = repo.get_events(task_id)
+    state_events = [e for e in events if e.event_type == "STATE_CHANGED"]
+    
+    history = []
+    for i, ev in enumerate(state_events):
+        state = ev.payload.get("new_status", "")
+        agent = ev.payload.get("agent")
+        entered_at = ev.timestamp.isoformat() if ev.timestamp else None
+        
+        # Duration = time until next state change
+        exited_at = None
+        duration_seconds = None
+        if i + 1 < len(state_events):
+            next_ts = state_events[i + 1].timestamp
+            if next_ts and ev.timestamp:
+                exited_at = next_ts.isoformat()
+                duration_seconds = round((next_ts - ev.timestamp).total_seconds(), 1)
+        
+        history.append({
+            "state": state,
+            "agent": agent,
+            "entered_at": entered_at,
+            "exited_at": exited_at,
+            "duration_seconds": duration_seconds,
+        })
+    
+    return history
+
 @app.get("/tasks/{task_id}/artifacts")
 def list_artifacts(task_id: str):
     return repo.get_artifacts(task_id)
