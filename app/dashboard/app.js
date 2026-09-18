@@ -720,476 +720,260 @@ function viewActivity() {
 /* ---------- view: Mission Control ---------- */
 function viewMission() {
   const wrap = el("div", {});
-  const sel = el("select", { class: "search", onchange: (e) => selectMissionTask(e.target.value) },
-    el("option", { value: "", text: "-- select a task --" }),
+  const sel = el("select", { class: "search", style: "max-width: 400px; margin-bottom: 24px; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-warm);", onchange: (e) => selectMissionTask(e.target.value) },
+    el("option", { value: "", text: "-- Select a Task to view Mission Control --" }),
     state.tasks.map((t) => el("option", {
       value: t.id,
       text: t.title + "  [" + t.status + "]",
       selected: state.selectedTaskId === t.id ? "selected" : null
     }))
   );
-  wrap.appendChild(el("div", { class: "toolbar" },
-    el("span", { class: "faint", text: "Task:" }), sel,
-    el("div", { class: "spacer" }),
-    state.selectedTaskId ? el("button", { class: "btn sm", text: "Refresh", onclick: () => selectMissionTask(state.selectedTaskId) }) : null
-  ));
+  wrap.appendChild(sel);
+
   if (!state.selectedTaskId) {
-    wrap.appendChild(el("div", { class: "card" }, emptyState("\u25CE", "Select a task to open Mission Control.")));
+    wrap.appendChild(el("div", { class: "card empty" }, emptyState("\u2398", "Select a task to open Mission Control.")));
     return wrap;
   }
+  
   const t = taskById(state.selectedTaskId);
   if (!t) {
-    wrap.appendChild(el("div", { class: "card" }, emptyState("\u25CE", "Task not found.")));
+    wrap.appendChild(el("div", { class: "card empty" }, emptyState("\u2398", "Task not found.")));
     return wrap;
   }
 
   const isTerminal = TERMINAL.indexOf(t.status) !== -1;
   const isActive = ACTIVE_STATES.indexOf(t.status) !== -1;
-
-  /* ===== Task Header Hero ===== */
   const agent = agentDisplayName(t.current_agent);
   const role = agentRole(t.current_agent);
 
-  const heroLeft = el("div", {},
-    el("h2", { style: "margin:0 0 4px 0;font-size:1.25rem", text: t.title }),
-    el("div", { class: "flex", style: "gap:8px;align-items:center;flex-wrap:wrap" },
-      statusBadge(t.status),
-      agent ? el("span", { class: "agent-badge", text: (role ? role + ": " : "") + agent }) : null,
-      el("span", { class: "mono faint", text: shortId(t.id) })
-    )
-  );
-  const heroRight = el("div", { style: "text-align:right;min-width:180px" });
-  if (t.started_at) {
-    heroRight.appendChild(el("div", { class: "stat-label", text: "Elapsed" }));
-    heroRight.appendChild(liveTimer(t.started_at, "hero-timer"));
-  }
-  // Current state timer
-  const lastStateEntry = getLastStateEntryTime();
-  if (lastStateEntry && isActive) {
-    heroRight.appendChild(el("div", { class: "stat-label", style: "margin-top:8px", text: STATUS_META[t.status] ? STATUS_META[t.status].label : t.status }));
-    heroRight.appendChild(liveTimer(lastStateEntry, ""));
-  }
-  heroRight.appendChild(el("div", { style: "margin-top:8px" },
-    el("span", { class: "stat-label", text: "Started: " }),
-    el("span", { class: "mono", text: fmtTime(t.started_at) })
-  ));
-  heroRight.appendChild(el("div", {},
-    el("span", { class: "stat-label", text: "Iteration: " }),
-    el("span", { class: "mono", text: (t.iteration || 0) + " / " + (t.max_iterations || 0) })
-  ));
-
-  const hero = el("div", { class: "task-header-hero mb" }, heroLeft, heroRight);
-  wrap.appendChild(hero);
-
   const grid = el("div", { class: "mc-grid" });
 
-  /* ===== Left column ===== */
-  const left = el("div", {});
+  /* ===== Left Sidebar: Status & Info ===== */
+  const left = el("div", { class: "mc-panel" });
 
-  /* Pipeline + State Timeline */
-  const railCard = el("div", { class: "card pad-0 mb" },
-    el("div", { class: "card-head" },
-      el("h3", { text: "Pipeline" }),
-      el("div", { class: "spacer" }),
-      statusBadge(t.status)
-    )
+  // Main Status Card
+  const currentElapsed = isTerminal ? null : (getLastStateEntryTime() || t.started_at);
+  const statCard = el("div", { class: "stat-card" },
+    el("div", { class: "stat-label", text: "TASK" }),
+    el("div", { style: "font-weight: 600; font-size: 16px; margin-bottom: 8px;", text: t.title }),
+    el("div", { class: "stat-label", text: "STATUS" }),
+    el("div", { style: "margin-bottom: 8px;" }, statusBadge(t.status)),
+    el("div", { class: "stat-label", text: "CURRENT STATE" }),
+    el("div", { style: "margin-bottom: 8px; font-weight: 500;" }, [STATUS_META[t.status] ? STATUS_META[t.status].label : t.status]),
+    el("div", { class: "stat-label", text: "CURRENT AGENT" }),
+    el("div", { class: "mono", style: "font-size: 13px; margin-bottom: 8px; color: var(--brand-burgundy-primary); font-weight: 600;" }, [agent ? (role ? role + ": " : "") + agent : "None"]),
+    el("div", { class: "stat-label", text: "MODEL" }),
+    el("div", { class: "mono faint", style: "font-size: 13px; margin-bottom: 8px;" }, [state.telemetry.model || "Unavailable"]),
+    el("div", { class: "stat-label", text: "STARTED" }),
+    el("div", { class: "mono", style: "margin-bottom: 8px;" }, [fmtTime(t.started_at)]),
+    el("div", { class: "stat-label", text: "TOTAL ELAPSED" }),
+    el("div", { class: "stat-val", style: "margin-bottom: 8px;" }, [liveTimer(t.started_at, null)]),
+    el("div", { class: "stat-label", text: "CURRENT STATE ELAPSED" }),
+    el("div", { class: "stat-val", style: "margin-bottom: 8px;" }, [liveTimer(currentElapsed, null)]),
+    el("div", { class: "stat-label", text: "ITERATION" }),
+    el("div", { class: "mono", style: "margin-bottom: 8px;" }, [(t.iteration || 0) + " / " + (t.max_iterations || 0)])
   );
-  const railBody = el("div", { class: "card-body" });
+  left.appendChild(statCard);
 
-  // Build state durations from state history
-  const historyMap = {};
-  for (const h of state.stateHistory) {
-    historyMap[h.state] = h;
-  }
-
-  const rail = el("div", { class: "stage-rail" });
-  const curIdx = STAGES.indexOf(t.status);
-  for (let i = 0; i < STAGES.length; i++) {
-    const s = STAGES[i];
-    let cls = "stage";
-    if (isTerminal) {
-      if (s === t.status) cls += " fail";
-    } else if (i < curIdx) cls += " done";
-    else if (i === curIdx) cls += " current";
-
-    const hEntry = historyMap[s];
-    let durNode = null;
-    if (hEntry && hEntry.duration_seconds !== null && hEntry.duration_seconds !== undefined) {
-      durNode = el("span", { class: "stage-dur", text: dur(hEntry.duration_seconds) });
-    } else if (i === curIdx && !isTerminal && lastStateEntry) {
-      durNode = liveTimer(lastStateEntry, "stage-dur");
-    }
-
-    rail.appendChild(el("div", { class: cls },
-      el("span", { class: "sdot" }),
-      el("span", { class: "slabel", text: STATUS_META[s] ? STATUS_META[s].label : s }),
-      durNode
-    ));
-  }
-  railBody.appendChild(rail);
-  railCard.appendChild(railBody);
-  left.appendChild(railCard);
-
-  /* Telemetry card */
-  const telCard = el("div", { class: "card pad-0 mb" },
-    el("div", { class: "card-head" }, el("h3", { text: "Telemetry" }))
+  // Telemetry Card
+  const telCard = el("div", { class: "stat-card" },
+    el("div", { class: "stat-label", text: "TOKENS" }),
+    state.telemetry.usage ? 
+      el("div", { class: "mono", style: "font-size: 13px;" }, [
+        `In: ${state.telemetry.usage.input_tokens || 0}`,
+        el("br", {}),
+        `Out: ${state.telemetry.usage.output_tokens || 0}`,
+        el("br", {}),
+        `Total: ${state.telemetry.usage.total_tokens || 0}`
+      ]) : 
+      el("div", { class: "mono faint", style: "font-size: 13px;" }, ["Unavailable from provider"]),
+    el("div", { class: "stat-label", style: "margin-top: 12px;", text: "LATEST EVENT" }),
+    el("div", { style: "font-size: 13px; color: var(--text-secondary);" }, [state.taskEvents.length ? esc(state.taskEvents[state.taskEvents.length-1].event_type) : "No events"])
   );
-  const tb = el("div", { class: "card-body" });
-  const tel = state.telemetry;
-  if (tel.model) {
-    tb.appendChild(el("div", { class: "kv" },
-      el("div", { class: "k", text: "Model" }),
-      el("div", { class: "v mono", text: tel.model })
-    ));
-  }
-  if (tel.usage) {
-    const u = tel.usage;
-    if (u.input_tokens !== undefined) {
-      tb.appendChild(el("div", { class: "kv" },
-        el("div", { class: "k", text: "Input Tokens" }),
-        el("div", { class: "v mono", text: Number(u.input_tokens).toLocaleString() })
-      ));
-    }
-    if (u.output_tokens !== undefined) {
-      tb.appendChild(el("div", { class: "kv" },
-        el("div", { class: "k", text: "Output Tokens" }),
-        el("div", { class: "v mono", text: Number(u.output_tokens).toLocaleString() })
-      ));
-    }
-    if (u.thinking_tokens !== undefined && u.thinking_tokens > 0) {
-      tb.appendChild(el("div", { class: "kv" },
-        el("div", { class: "k", text: "Thinking Tokens" }),
-        el("div", { class: "v mono", text: Number(u.thinking_tokens).toLocaleString() })
-      ));
-    }
-    if (u.total_tokens !== undefined) {
-      tb.appendChild(el("div", { class: "kv" },
-        el("div", { class: "k", text: "Total Tokens" }),
-        el("div", { class: "v mono", text: Number(u.total_tokens).toLocaleString() })
-      ));
-    }
-    tb.appendChild(el("div", { class: "kv" },
-      el("div", { class: "k", text: "Source" }),
-      el("div", { class: "v faint", text: "reported by provider" })
-    ));
-  } else {
-    tb.appendChild(el("div", { class: "faint", style: "padding:8px 0", text: "Token usage unavailable from current provider" }));
-  }
-  if (tel.duration_seconds) {
-    tb.appendChild(el("div", { class: "kv" },
-      el("div", { class: "k", text: "Provider Duration" }),
-      el("div", { class: "v mono", text: dur(tel.duration_seconds) })
-    ));
-  }
-  if (tel.num_turns) {
-    tb.appendChild(el("div", { class: "kv" },
-      el("div", { class: "k", text: "Turns" }),
-      el("div", { class: "v mono", text: String(tel.num_turns) })
-    ));
-  }
-  telCard.appendChild(tb);
   left.appendChild(telCard);
-
-  /* Task Detail */
-  const detail = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" }, el("h3", { text: "Task Detail" }))
-  );
-  const db = el("div", { class: "card-body" });
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Project" }), el("div", { class: "v", text: projectName(t.project_id) })));
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Priority" }), el("div", { class: "v" }, priorityBadge(t.priority))));
-  db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Created" }), el("div", { class: "v", text: fmtDateTime(t.created_at) })));
-  if (t.completed_at) {
-    db.appendChild(el("div", { class: "kv" }, el("div", { class: "k", text: "Completed" }), el("div", { class: "v", text: fmtDateTime(t.completed_at) })));
-  }
-  if (t.description) {
-    db.appendChild(el("div", { class: "mt" },
-      el("div", { class: "stat-label mb", text: "Description" }),
-      el("div", { class: "pre", text: t.description })
-    ));
-  }
-  if (t.error_information) {
-    db.appendChild(el("div", { class: "mt" },
-      el("div", { class: "stat-label mb", text: "Error" }),
-      el("div", { class: "pre err-pre", text: t.error_information })
-    ));
-  }
-  detail.appendChild(db);
-  left.appendChild(detail);
+  
   grid.appendChild(left);
 
-  /* ===== Right column ===== */
-  const right = el("div", {});
-
-  /* Controls */
-  const ctrl = el("div", { class: "card pad-0 mb" },
-    el("div", { class: "card-head" }, el("h3", { text: "Controls" }))
+  /* ===== Right Side: State Timeline & Actions ===== */
+  const right = el("div", { class: "mc-panel" });
+  
+  const tlCard = el("div", { class: "card pad-0" },
+    el("div", { class: "card-head" }, el("h3", { text: "State Timeline" }))
   );
-  const cb = el("div", { class: "card-body" });
-  cb.appendChild(el("div", { class: "flex wrap" },
-    el("button", { class: "btn primary", text: "Start", disabled: isActive ? "disabled" : null, onclick: () => runTask(t.id) }),
-    el("button", { class: "btn danger", text: "Stop", disabled: isActive ? null : "disabled", onclick: () => stopTask(t.id) }),
-    el("button", { class: "btn", text: "Refresh", onclick: () => selectMissionTask(t.id) })
-  ));
-  cb.appendChild(el("div", { class: "mt faint", text: isActive ? "Task is running. Live events stream below." : (isTerminal ? "Task has finished." : "Task is idle.") }));
-  ctrl.appendChild(cb);
-  right.appendChild(ctrl);
+  const tlBody = el("div", { class: "card-body timeline" });
 
-  /* Live Event Stream */
-  const logCard = el("div", { class: "card pad-0 mb" },
-    el("div", { class: "card-head" },
-      el("h3", { text: "Live Event Stream" }),
-      el("div", { class: "spacer" }),
-      el("span", { class: "dot " + (state.ws && state.ws.readyState === 1 ? "ok" : "warn") }),
-      el("span", { class: "faint mono", text: state.ws && state.ws.readyState === 1 ? "live" : "poll" })
+  const stateTimes = {};
+  for (let i = 0; i < state.stateHistory.length; i++) {
+    const s = state.stateHistory[i];
+    const n = state.stateHistory[i+1];
+    const sName = s.payload ? s.payload.new_state : "UNKNOWN";
+    const start = new Date(s.timestamp).getTime() / 1000;
+    const end = n ? new Date(n.timestamp).getTime() / 1000 : Date.now() / 1000;
+    if (!stateTimes[sName]) stateTimes[sName] = 0;
+    stateTimes[sName] += (end - start);
+  }
+
+  let passedActive = false;
+  for (const s of STAGES) {
+    const isCurrent = s === t.status;
+    const hasBeen = stateTimes[s] !== undefined || (s === "PENDING" && t.started_at);
+    if (isCurrent) passedActive = true;
+    
+    let tlClass = "tl-item ";
+    let icon = "\u25CB"; // Empty circle
+    if (hasBeen && !isCurrent && !passedActive) {
+      tlClass += "done";
+      icon = "\u2713"; // Checkmark
+    } else if (isCurrent) {
+      tlClass += "active";
+      icon = "\u25CF"; // Filled circle
+    } else {
+      tlClass += "pending";
+    }
+    
+    const labelStr = STATUS_META[s] ? STATUS_META[s].label : s;
+    const durStr = (stateTimes[s] || isCurrent) ? (isCurrent && isActive ? liveTimer(currentElapsed, null, true) : el("span", { text: dur(stateTimes[s]) })) : null;
+    
+    tlBody.appendChild(el("div", { class: tlClass },
+      el("div", { class: "tl-icon", text: icon }),
+      el("div", { class: "tl-label", text: labelStr }),
+      el("div", { class: "tl-dur" }, [durStr])
+    ));
+  }
+
+  tlCard.appendChild(tlBody);
+  right.appendChild(tlCard);
+
+  // Quick Action Buttons
+  const actCard = el("div", { class: "card" },
+    el("div", { class: "flex" },
+      (!isTerminal && t.status !== "PAUSED" && t.status !== "PENDING") ? el("button", { class: "btn danger", text: "Stop Task", onclick: () => api(`/tasks/${t.id}/stop`, { method: "POST" }).then(refresh) }) : null,
+      (t.status === "PENDING") ? el("button", { class: "btn primary", text: "Start Task", onclick: () => api(`/tasks/${t.id}/start`, { method: "POST" }).then(refresh) }) : null
     )
   );
-  const lb = el("div", { class: "card-body" });
-  const log = el("div", { class: "log", id: "mission-log" });
-  if (!state.taskEvents.length) {
-    log.appendChild(el("div", { class: "faint", text: "No events yet." }));
-  } else {
-    // Filter out noisy AGENT_CHUNK text events for the log, keep tool calls and state changes
-    for (const e of state.taskEvents) {
-      const p = e.payload || {};
-      if (e.event_type === "AGENT_CHUNK" && p.type === "text") continue;
-      if (e.event_type === "AGENT_CHUNK" && p.type === "step_telemetry") continue;
-      log.appendChild(logLine(e));
-    }
-  }
-  lb.appendChild(log);
-  logCard.appendChild(lb);
-  right.appendChild(logCard);
-
-  /* Artifacts */
-  const artCard = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" },
-      el("h3", { text: "Artifacts" }),
-      el("div", { class: "spacer" }),
-      el("span", { class: "faint mono", text: String(state.taskArtifacts.length) })
-    )
-  );
-  const ab = el("div", { class: "card-body" });
-  if (!state.taskArtifacts.length) {
-    ab.appendChild(el("div", { class: "faint", text: "No artifacts recorded." }));
-  } else {
-    for (const a of state.taskArtifacts) {
-      ab.appendChild(el("div", { class: "kv" },
-        el("div", { class: "k" },
-          el("span", { class: "badge cyan", text: a.kind || "artifact" }),
-          el("span", { class: "mono faint", style: "margin-left:8px", text: a.path || a.name || shortId(a.id) })
-        ),
-        el("div", { class: "v faint", text: fmtDateTime(a.created_at) })
-      ));
-    }
-  }
-  artCard.appendChild(ab);
-  right.appendChild(artCard);
+  right.appendChild(actCard);
 
   grid.appendChild(right);
   wrap.appendChild(grid);
+  
   return wrap;
 }
-
-/** Get the ISO timestamp of when the current state was entered */
-function getLastStateEntryTime() {
-  if (!state.stateHistory.length) return null;
-  const last = state.stateHistory[state.stateHistory.length - 1];
-  return last.entered_at || null;
-}
-
-async function selectMissionTask(id) {
-  state.selectedTaskId = id || null;
-  state.taskEvents = [];
-  state.taskArtifacts = [];
-  state.stateHistory = [];
-  state.telemetry = {};
-  closeWs();
-  if (!id) { render(); return; }
-  render();
-  try {
-    const [events, artifacts, history] = await Promise.all([
-      api("/tasks/" + id + "/events").catch(() => []),
-      api("/tasks/" + id + "/artifacts").catch(() => []),
-      api("/tasks/" + id + "/state-history").catch(() => [])
-    ]);
-    state.taskEvents = events || [];
-    state.taskArtifacts = artifacts || [];
-    state.stateHistory = history || [];
-    // Extract telemetry from events
-    extractTelemetryFromEvents(events || []);
-  } catch (e) {
-    toast("Failed to load task detail: " + e.message, "err");
-  }
-  render();
-  openWs(id);
-}
-
-/** Scan events for telemetry data (init_info, result_telemetry) */
-function extractTelemetryFromEvents(events) {
-  state.telemetry = {};
-  for (const e of events) {
-    if (e.event_type !== "AGENT_CHUNK") continue;
-    const p = e.payload || {};
-    if (p.type === "init_info") {
-      if (p.model) state.telemetry.model = p.model;
-    }
-    if (p.type === "result_telemetry") {
-      if (p.model) state.telemetry.model = p.model;
-      if (p.usage) state.telemetry.usage = p.usage;
-      if (p.duration_seconds) state.telemetry.duration_seconds = p.duration_seconds;
-      if (p.num_turns) state.telemetry.num_turns = p.num_turns;
-    }
-  }
-}
-
-/* ---------- WebSocket ---------- */
-function openWs(taskId) {
-  try {
-    const proto = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(proto + "//" + location.host + "/ws/tasks/" + taskId);
-    state.ws = ws;
-    state.wsTaskId = taskId;
-    ws.onmessage = (ev) => {
-      if (state.wsTaskId !== taskId) return;
-      let msg = null;
-      try { msg = JSON.parse(ev.data); } catch (_) { return; }
-      if (msg && msg.event_type) {
-        state.taskEvents.push(msg);
-        // Handle telemetry events inline
-        if (msg.event_type === "AGENT_CHUNK" && msg.payload) {
-          const p = msg.payload;
-          if (p.type === "init_info" && p.model) {
-            state.telemetry.model = p.model;
-          }
-          if (p.type === "result_telemetry") {
-            if (p.model) state.telemetry.model = p.model;
-            if (p.usage) state.telemetry.usage = p.usage;
-            if (p.duration_seconds) state.telemetry.duration_seconds = p.duration_seconds;
-            if (p.num_turns) state.telemetry.num_turns = p.num_turns;
-          }
-        }
-        // Filter out text chunks from log
-        const payload = msg.payload || {};
-        if (!(msg.event_type === "AGENT_CHUNK" && (payload.type === "text" || payload.type === "step_telemetry"))) {
-          appendLogLine(msg);
-        }
-        if (msg.event_type === "STATE_CHANGED" && msg.payload) {
-          const t = taskById(taskId);
-          if (t) {
-            t.status = msg.payload.new_status || t.status;
-            if (msg.payload.agent) t.current_agent = msg.payload.agent;
-            if (msg.payload.error) t.error_information = msg.payload.error;
-          }
-          // Update state history
-          state.stateHistory.push({
-            state: msg.payload.new_status,
-            agent: msg.payload.agent,
-            entered_at: msg.created_at,
-            exited_at: null,
-            duration_seconds: null
-          });
-          // Close previous entry
-          if (state.stateHistory.length > 1) {
-            const prev = state.stateHistory[state.stateHistory.length - 2];
-            if (!prev.exited_at) {
-              prev.exited_at = msg.created_at;
-              const entered = new Date(prev.entered_at);
-              const exited = new Date(prev.exited_at);
-              if (!isNaN(entered) && !isNaN(exited)) {
-                prev.duration_seconds = Math.round((exited - entered) / 1000 * 10) / 10;
-              }
-            }
-          }
-          if (state.route === "mission" && state.selectedTaskId === taskId) {
-            render();
-          }
-        }
-      }
-    };
-    ws.onclose = () => { if (state.ws === ws) state.ws = null; };
-    ws.onerror = () => {};
-  } catch (_) {
-    state.ws = null;
-  }
-}
-
-function closeWs() {
-  if (state.ws) {
-    try { state.ws.close(); } catch (_) {}
-    state.ws = null;
-  }
-  state.wsTaskId = null;
-}
-
-function appendLogLine(e) {
-  const log = $("#mission-log");
-  if (!log) return;
-  if (log.firstChild && log.firstChild.className === "faint") log.innerHTML = "";
-  log.appendChild(logLine(e));
-  log.scrollTop = log.scrollHeight;
-}
-
-/* ---------- view: Settings ---------- */
 function viewSettings() {
   const wrap = el("div", {});
   const cfg = state.config || {};
-  const card = el("div", { class: "card pad-0 mb" },
-    el("div", { class: "card-head" },
-      el("h3", { text: "Runtime Configuration" }),
-      el("div", { class: "spacer" }),
-      el("button", { class: "btn sm", text: "Reload", onclick: refresh })
-    )
-  );
-  const b = el("div", { class: "card-body" });
+  
+  // Create sections as requested: GENERAL, AGENTS, TELEMETRY, WORKSPACE, DANGER ZONE
+  const genCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "General Runtime" })));
+  const agCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Agents (Agy / Abacus)" })));
+  const telCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Telemetry & Usage" })));
+  const wsCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Workspace Paths" })));
+
+  const genB = el("div", { class: "card-body" });
+  const agB = el("div", { class: "card-body" });
+  const telB = el("div", { class: "card-body" });
+  const wsB = el("div", { class: "card-body" });
+
   const keys = Object.keys(cfg).sort();
-  if (!keys.length) {
-    b.appendChild(emptyState("\u2699", "Configuration unavailable."));
-  } else {
-    for (const k of keys) {
-      const v = cfg[k];
-      let node;
-      if (typeof v === "boolean") {
-        node = el("span", { class: "badge " + (v ? "green" : "gray"), text: v ? "true" : "false" });
-      } else if (v === null || v === undefined) {
-        node = el("span", { class: "faint", text: "-" });
-      } else if (typeof v === "object") {
-        node = el("span", { class: "mono faint", text: JSON.stringify(v) });
-      } else {
-        node = el("span", { class: "mono", text: String(v) });
-      }
-      b.appendChild(el("div", { class: "kv" }, el("div", { class: "k mono", text: k }), el("div", { class: "v" }, node)));
+  for (const k of keys) {
+    const v = cfg[k];
+    let node;
+    if (typeof v === "boolean") {
+      node = el("span", { class: "badge " + (v ? "green" : "gray"), text: v ? "true" : "false" });
+    } else if (v === null || v === undefined) {
+      node = el("span", { class: "faint", text: "-" });
+    } else {
+      node = el("span", { class: "mono", text: String(v) });
+    }
+    const row = el("div", { class: "kv" }, el("div", { class: "k mono", text: k }), el("div", { class: "v" }, node));
+    
+    if (k.includes("abacus") || k.includes("agy") || k.includes("reviewer") || k.includes("provider") || k.includes("model")) {
+      agB.appendChild(row);
+    } else if (k.includes("workspace") || k.includes("path") || k.includes("repository")) {
+      wsB.appendChild(row);
+    } else if (k.includes("telemetry") || k.includes("usage") || k.includes("token")) {
+      telB.appendChild(row);
+    } else {
+      genB.appendChild(row);
     }
   }
-  card.appendChild(b);
-  wrap.appendChild(card);
+  
+  genCard.appendChild(genB);
+  agCard.appendChild(agB);
+  telCard.appendChild(telB);
+  wsCard.appendChild(wsB);
 
-  const info = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" }, el("h3", { text: "Endpoints" }))
+  wrap.appendChild(genCard);
+  wrap.appendChild(agCard);
+  wrap.appendChild(telCard);
+  wrap.appendChild(wsCard);
+
+  // Danger Zone
+  const dz = el("div", { class: "danger-zone mt" },
+    el("h3", { text: "Danger Zone" }),
+    el("div", { class: "danger-row" },
+      el("div", { class: "info" },
+        el("h4", { text: "Clear Task Data" }),
+        el("p", { text: "Start a completely fresh ForgeFlow task history. Removes task records, events, artifacts, and temporary worktrees. Preserves source code and registered projects." })
+      ),
+      el("button", { class: "btn danger", text: "Clear Task Data", onclick: promptClearTaskData })
+    ),
+    el("div", { class: "danger-row" },
+      el("div", { class: "info" },
+        el("h4", { text: "Reset Configuration" }),
+        el("p", { text: "Restore ForgeFlow runtime configuration to documented defaults. Does not delete repositories." })
+      ),
+      el("button", { class: "btn danger", text: "Reset Configuration", onclick: promptResetConfig })
+    )
   );
-  const ib = el("div", { class: "card-body" });
-  const endpoints = [
-    ["GET", "/health"], ["GET", "/overview"], ["GET", "/config"],
-    ["GET", "/projects"], ["POST", "/projects"], ["GET", "/projects/{id}"],
-    ["PUT", "/projects/{id}"], ["DELETE", "/projects/{id}"],
-    ["GET", "/tasks"], ["POST", "/tasks"], ["GET", "/tasks/{id}"],
-    ["PUT", "/tasks/{id}"], ["DELETE", "/tasks/{id}"],
-    ["POST", "/tasks/{id}/start"], ["POST", "/tasks/{id}/stop"],
-    ["POST", "/tasks/{id}/pause"], ["POST", "/tasks/{id}/resume"],
-    ["POST", "/tasks/{id}/retry"], ["POST", "/tasks/{id}/cancel"],
-    ["GET", "/tasks/{id}/events"], ["GET", "/tasks/{id}/state-history"],
-    ["GET", "/tasks/{id}/artifacts"],
-    ["GET", "/artifacts/{id}/content"], ["GET", "/activity"],
-    ["WS", "/ws/tasks/{id}"]
-  ];
-  for (const pair of endpoints) {
-    ib.appendChild(el("div", { class: "kv" },
-      el("div", { class: "k mono", text: pair[1] }),
-      el("div", { class: "v" }, el("span", { class: "badge " + (pair[0] === "WS" ? "purple" : pair[0] === "GET" ? "blue" : "green"), text: pair[0] }))
-    ));
-  }
-  info.appendChild(ib);
-  wrap.appendChild(info);
+  wrap.appendChild(dz);
+
   return wrap;
+}
+
+function promptClearTaskData() {
+  const body = el("div", {},
+    el("p", { html: "<strong>Clear all ForgeFlow task data?</strong><br/><br/>The following will be deleted:<br/>- Task records<br/>- Task events and history<br/>- Task artifacts<br/>- Obsolete task worktrees<br/><br/><em>Dartulator and manually maintained worktrees will NOT be deleted.</em><br/><br/><strong>Active tasks must be stopped first.</strong>" })
+  );
+  const btn = el("button", { class: "btn danger", text: "Yes, Clear Data" });
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      await api("/settings/reset-data", { method: "POST" });
+      toast("Task data successfully cleared.", "ok");
+      closeModal();
+      refresh();
+    } catch (e) {
+      toast(e.message, "err");
+      btn.disabled = false;
+    }
+  };
+  openModal("Clear Task Data", body, [
+    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
+    btn
+  ]);
+}
+
+function promptResetConfig() {
+  const body = el("div", {},
+    el("p", { html: "<strong>Reset runtime configuration?</strong><br/><br/>This will restore provider settings, reviewer settings, and timeout values to defaults.<br/>Project registrations and repositories will NOT be changed." })
+  );
+  const btn = el("button", { class: "btn danger", text: "Yes, Reset Config" });
+  btn.onclick = async () => {
+    btn.disabled = true;
+    try {
+      await api("/settings/reset-config", { method: "POST" });
+      toast("Configuration reset.", "ok");
+      closeModal();
+      refresh();
+    } catch (e) {
+      toast(e.message, "err");
+      btn.disabled = false;
+    }
+  };
+  openModal("Reset Configuration", body, [
+    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
+    btn
+  ]);
 }
 
 /* ---------- modals ---------- */

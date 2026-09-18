@@ -370,3 +370,48 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         pass
     finally:
         event_bus.unsubscribe(task_id, callback)
+
+@app.post("/settings/reset-data")
+async def reset_data():
+    active_states = [
+        TaskState.PENDING, TaskState.PREPARING, TaskState.INVESTIGATING,
+        TaskState.ROOT_CAUSE_READY, TaskState.ROOT_CAUSE_REVIEW,
+        TaskState.IMPLEMENTING, TaskState.IMPLEMENTATION_READY,
+        TaskState.TESTING, TaskState.QA, TaskState.REVIEW,
+        TaskState.NEEDS_CHANGES, TaskState.APPROVED
+    ]
+    all_tasks = repo.get_tasks()
+    active_tasks = [t for t in all_tasks if t.status in active_states]
+    if active_tasks:
+        raise HTTPException(status_code=400, detail=f"Cannot reset. {len(active_tasks)} tasks are active.")
+    
+    import os, shutil, subprocess
+    if settings.workspace_root and os.path.exists(settings.workspace_root):
+        for item in os.listdir(settings.workspace_root):
+            item_path = os.path.join(settings.workspace_root, item)
+            if os.path.isdir(item_path):
+                shutil.rmtree(item_path, ignore_errors=True)
+                
+    projects = repo.get_projects()
+    for p in projects:
+        if os.path.isdir(p.repository):
+            try:
+                subprocess.run(["git", "worktree", "prune"], cwd=p.repository, capture_output=True, check=False)
+            except Exception:
+                pass
+
+    with db._get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM task_events")
+        cursor.execute("DELETE FROM artifacts")
+        cursor.execute("DELETE FROM tasks")
+        conn.commit()
+
+    return {"status": "success"}
+
+@app.post("/settings/reset-config")
+async def reset_config():
+    from app.config import Settings
+    global settings
+    settings.__init__() # Reset to defaults
+    return {"status": "success"}
