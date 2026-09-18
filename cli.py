@@ -41,11 +41,79 @@ def main():
     t_stop = task_subs.add_parser("stop")
     t_stop.add_argument("id")
 
+    # reset
+    reset_parser = subparsers.add_parser("reset")
+    reset_parser.add_argument("--force", action="store_true", help="Skip confirmation")
+
     args = parser.parse_args()
 
     if args.command == "health":
         r = requests.get(f"{API_URL}/health")
         print(r.json())
+        
+    elif args.command == "reset":
+        import os
+        import shutil
+        import subprocess
+        from app.config import settings
+        from app.state.db import Database
+        from app.state.repository import Repository
+        from app.models.state import TaskState
+
+        db = Database(settings.database_path)
+        repo = Repository(db)
+        
+        all_tasks = repo.get_tasks()
+        active_states = [
+            TaskState.PENDING, TaskState.PREPARING, TaskState.INVESTIGATING,
+            TaskState.ROOT_CAUSE_READY, TaskState.ROOT_CAUSE_REVIEW,
+            TaskState.IMPLEMENTING, TaskState.IMPLEMENTATION_READY,
+            TaskState.TESTING, TaskState.QA, TaskState.REVIEW,
+            TaskState.NEEDS_CHANGES, TaskState.APPROVED
+        ]
+        
+        active_tasks = [t for t in all_tasks if t.status in active_states]
+        if active_tasks:
+            print(f"Error: Cannot reset. {len(active_tasks)} tasks are currently active.")
+            print("Please stop them via the dashboard or CLI before resetting.")
+            sys.exit(1)
+
+        print("This will completely reset the ForgeFlow task history.")
+        print("The following will be deleted:")
+        print(f" - {len(all_tasks)} task records (including all events and artifacts)")
+        print(f" - All temporary worktrees in: {settings.workspace_root}")
+        
+        if not args.force:
+            ans = input("Are you sure you want to proceed? [y/N]: ")
+            if ans.lower() != 'y':
+                print("Aborted.")
+                sys.exit(0)
+
+        # 1. Delete worktrees from disk safely
+        if settings.workspace_root and os.path.exists(settings.workspace_root):
+            for item in os.listdir(settings.workspace_root):
+                item_path = os.path.join(settings.workspace_root, item)
+                if os.path.isdir(item_path):
+                    shutil.rmtree(item_path, ignore_errors=True)
+                    
+        # 2. Prune git worktrees in registered projects to clean up Git metadata
+        projects = repo.get_projects()
+        for p in projects:
+            if os.path.isdir(p.repository):
+                try:
+                    subprocess.run(["git", "worktree", "prune"], cwd=p.repository, capture_output=True, check=False)
+                except Exception:
+                    pass
+                    
+        # 3. Delete tasks, events, artifacts
+        with db._get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM task_events")
+            cursor.execute("DELETE FROM artifacts")
+            cursor.execute("DELETE FROM tasks")
+            conn.commit()
+            
+        print("Reset complete. ForgeFlow task history is now empty.")
     
     elif args.command == "serve":
         loop_opt = "auto"

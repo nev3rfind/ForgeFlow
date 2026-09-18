@@ -162,7 +162,19 @@ python cli.py task create --project "<project-id>" --title "Fix login bug" --des
 
 # Start task
 python cli.py task start <task-id>
+## Reset ForgeFlow Task History
+
+When you are finished testing and want to clean up your dashboard, you can safely wipe all task history and temporary worktrees without affecting your registered projects, configuration, or personal source repositories.
+
+```powershell
+python cli.py reset
 ```
+
+This command will prompt for confirmation and then:
+- Refuse to run if any tasks are currently active
+- Delete all task database records, events, and artifacts
+- Safely delete temporary ForgeFlow runtime worktrees (`runtime/worktrees`)
+- Run `git worktree prune` on all registered projects to clean up Git metadata
 
 ## Running Tests
 
