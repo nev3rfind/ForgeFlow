@@ -1,0 +1,26 @@
+{
+  "orchestrator": {
+    "provider": "agy",
+    "model": "default"
+  },
+  "investigator": {
+    "provider": "agy",
+    "model": null
+  },
+  "coder": {
+    "provider": "agy",
+    "model": null
+  },
+  "tester": {
+    "provider": "agy",
+    "model": null
+  },
+  "qa": {
+    "provider": "agy",
+    "model": null
+  },
+  "reviewer": {
+    "provider": "abacus",
+    "model": null
+  }
+}

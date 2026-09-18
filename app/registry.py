@@ -256,3 +256,14 @@ provider_registry.register(ProviderInfo(
 ))
 
 provider_registry.load_custom()
+
+provider_registry.register(ProviderInfo(
+    id="agy_desktop",
+    display_name="Google Antigravity (Desktop RPA)",
+    status="RPA Ready",
+    supported_roles=["orchestrator", "investigator", "coder", "tester", "qa", "reviewer"],
+    models=[
+        ProviderModel(id="default", name="Current Desktop Conversation")
+    ]
+))
+

@@ -29,10 +29,13 @@ class Orchestrator:
         provider_obj = self.provider
         if provider_name == "abacus":
             provider_obj = self.reviewer_provider or self.provider
+        elif provider_name == "agy_desktop":
+            from app.integrations.agy_desktop_adapter import AgyDesktopAdapter
+            provider_obj = AgyDesktopAdapter()
             
         # Emit a quick internal event to notify the frontend which agent/role/model is active
         # The frontend can capture this to update the UI
-        agent_name = "Abacus AI" if provider_name == "abacus" else "Google Antigravity"
+        agent_name = "Abacus AI" if provider_name == "abacus" else ("Google Antigravity (RPA)" if provider_name == "agy_desktop" else "Google Antigravity")
         return provider_obj, model, agent_name
 
     def __init__(
