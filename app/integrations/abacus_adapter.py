@@ -217,6 +217,9 @@ class AbacusReviewerProvider(AgentProvider):
             "--disallowed-tools", "bash",
             "--disallowed-tools", "shell_start"
         ]
+        
+        if model and model not in ("default", "auto"):
+            cmd.extend(["--model", model])
 
         logger.info(f"Invoking Abacus CLI reviewer in plan mode with timeout {self.timeout}s")
         

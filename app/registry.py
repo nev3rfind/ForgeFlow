@@ -44,10 +44,13 @@ provider_registry.register(ProviderInfo(
     id="abacus",
     display_name="Abacus AI",
     status="Connected",
-    supported_roles=["reviewer"],
+    supported_roles=["orchestrator", "investigator", "coder", "tester", "qa", "reviewer"],
     models=[
-        ProviderModel(id="default", name="Default Model"),
+        ProviderModel(id="auto", name="Auto (Let Abacus Choose)"),
         ProviderModel(id="claude-3.5-sonnet", name="Claude 3.5 Sonnet"),
-        ProviderModel(id="gpt-4o", name="GPT-4o")
+        ProviderModel(id="gpt-4o", name="GPT-4o"),
+        ProviderModel(id="claude-3-opus", name="Claude 3 Opus"),
+        ProviderModel(id="llama-3", name="Llama 3"),
+        ProviderModel(id="gemini-1.5-pro", name="Gemini 1.5 Pro")
     ]
 ))
