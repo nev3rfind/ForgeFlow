@@ -919,7 +919,7 @@ function viewSettings() {
             el("input", { type: "password", placeholder: "abacus-...", value: "" })
           ),
           el("div", { style: "display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 8px;" },
-            el("button", { class: "btn ghost", text: "+ Add Custom Provider", onclick: () => toast("Custom providers coming soon", "ok") }),
+            el("button", { class: "btn ghost", text: "+ Add Custom Provider", onclick: promptAddProvider }),
             el("button", { class: "btn primary", text: "Save Keys", onclick: () => toast("API Keys securely saved", "ok") })
           )
         )
@@ -1153,6 +1153,62 @@ async function openTask(id) {
     );
   }
 
+
+  
+  function promptAddProvider() {
+    let pid, pname, proles, pmodels;
+    
+    openModal("Add Custom Provider",
+      el("div", { style: "display: flex; flex-direction: column; gap: 12px;" },
+        el("div", { class: "field", style: "margin:0" },
+          el("label", { text: "Provider ID (e.g. openai)" }),
+          pid = el("input", { type: "text", placeholder: "openai" })
+        ),
+        el("div", { class: "field", style: "margin:0" },
+          el("label", { text: "Display Name (e.g. OpenAI)" }),
+          pname = el("input", { type: "text", placeholder: "OpenAI" })
+        ),
+        el("div", { class: "field", style: "margin:0" },
+          el("label", { text: "Supported Roles (comma separated)" }),
+          proles = el("input", { type: "text", placeholder: "coder, reviewer, orchestrator" })
+        ),
+        el("div", { class: "field", style: "margin:0" },
+          el("label", { text: "Models (comma separated)" }),
+          pmodels = el("input", { type: "text", placeholder: "gpt-4o, gpt-3.5-turbo" })
+        )
+      ),
+      [
+        el("button", { class: "btn ghost", text: "Cancel", onclick: closeModal }),
+        el("button", { class: "btn primary", text: "Add Provider", onclick: async () => {
+          const id = pid.value.trim();
+          const name = pname.value.trim();
+          const roles = proles.value.split(",").map(s => s.trim()).filter(Boolean);
+          const models = pmodels.value.split(",").map(s => s.trim()).filter(Boolean).map(m => ({ id: m, name: m }));
+          
+          if (!id || !name || !roles.length || !models.length) {
+            toast("Please fill all fields", "err");
+            return;
+          }
+          
+          try {
+            await api("/providers/custom", {
+              method: "POST",
+              body: {
+                id: id,
+                display_name: name,
+                status: "Connected",
+                supported_roles: roles,
+                models: models
+              }
+            });
+            toast("Custom provider added", "ok");
+            closeModal();
+            loadAll();
+          } catch (e) { toast(e.message, "err"); }
+        }})
+      ]
+    );
+  }
 
   /* ---------- actions ---------- */
 async function runTask(id) {

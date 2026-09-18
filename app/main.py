@@ -428,6 +428,15 @@ async def reset_data():
     return {"status": "success"}
 
 
+
+from app.registry import ProviderInfo
+
+@app.post("/providers/custom")
+async def add_custom_provider(info: ProviderInfo):
+    from app.registry import provider_registry
+    provider_registry.save_custom(info)
+    return {"status": "success"}
+
 @app.post("/system/restart")
 async def restart_system():
     # We return a success response, then trigger a background task to exit with code 42
