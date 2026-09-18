@@ -246,7 +246,7 @@ class TestCommandConstruction:
     async def test_cwd_is_first_workspace(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "hi"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "hi"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -259,7 +259,7 @@ class TestCommandConstruction:
         """A prompt containing a path must not affect cwd."""
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "ok"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "ok"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -281,7 +281,7 @@ class TestCommandConstruction:
     async def test_gemini_key_not_in_child_env(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "x"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "x"}}}).encode() + b"\n",
             b"",
         ]
         with patch.dict(os.environ, {"GEMINI_API_KEY": "should-be-removed"}):
@@ -294,7 +294,7 @@ class TestCommandConstruction:
     async def test_dangerously_skip_permissions_in_args(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "x"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "x"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -307,7 +307,7 @@ class TestCommandConstruction:
     async def test_json_schema_flag_present(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "x"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "x"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -327,7 +327,7 @@ class TestStructuredOutput:
     async def test_official_result_event_used(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "from result"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "from result"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -368,7 +368,7 @@ class TestStructuredOutput:
         """Result event payload that doesn't match schema → clear error."""
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"wrong_field": 99}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"wrong_field": 99}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -421,7 +421,7 @@ class TestStreamEvents:
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
             json.dumps({"event": "step_update", "step_update": {"step_type": "agent_response", "state": "ACTIVE", "content": "Working..."}}).encode() + b"\n",
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "done"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "done"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -434,7 +434,7 @@ class TestStreamEvents:
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
             json.dumps({"event": "step_update", "step_update": {"step_type": "tool", "state": "ACTIVE", "tool_info": {"name": "read_file", "parameters": {"path": "x.py"}}}}).encode() + b"\n",
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "done"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "done"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -446,7 +446,7 @@ class TestStreamEvents:
     async def test_structured_output_yielded_last(self, agy_provider, mock_subprocess):
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "final"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "final"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -460,7 +460,7 @@ class TestStreamEvents:
         mock_exec, mock_process = mock_subprocess
         mock_process.stdout.readline.side_effect = [
             b"Fatal error: something went wrong\n",
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "ok"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "ok"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:
@@ -474,7 +474,7 @@ class TestStreamEvents:
         mock_process.stdout.readline.side_effect = [
             b"this is definitely not json\n",
             b"{also not json\n",
-            json.dumps({"event": "result", "result": {"status": "OK", "response": {"message": "survived"}}}).encode() + b"\n",
+            json.dumps({"event": "result", "result": {"status": "OK", "structured_output": {"message": "survived"}}}).encode() + b"\n",
             b"",
         ]
         with tempfile.TemporaryDirectory() as workspace:

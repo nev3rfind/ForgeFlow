@@ -243,44 +243,43 @@ class AgyProvider(AgentProvider):
     # ------------------------------------------------------------------
     # JSON / structured-output helpers
     # ------------------------------------------------------------------
-    @staticmethod
-    def _coerce_output(output: Any) -> Optional[Dict[str, Any]]:
-        if output is None:
-            return None
-        if isinstance(output, BaseModel):
-            return output.model_dump()
-        if isinstance(output, dict):
-            return output
-        return {"value": output}
-
     def _validate_or_fallback(
         self,
-        structured: Any,
-        final_text: Optional[str],
+        raw_result: Optional[Dict[str, Any]],
+        final_text: str,
         schema: Type[BaseModel],
     ) -> BaseModel:
         """Validate structured result against schema, with a safe text fallback.
 
         Priority:
-        1. Use the official ``result`` event payload when it validates.
-        2. Extract the *last* JSON object from the final assistant text only
-           when the official result is absent or invalid.
+        1. Use `structured_output` from the final `result` event if it validates.
+        2. Extract the *last* JSON object from the final assistant text or `response` string.
 
-        Never treats intermediate tool output as the final result because
-        ``final_text`` accumulates only ``agent_response`` ACTIVE chunks, not
-        tool output.
+        Never coerces arbitrary text into {"value": text}.
         """
-        coerced = self._coerce_output(structured)
-        if coerced is not None:
+        if raw_result is None:
+            raw_result = {}
+            
+        status = raw_result.get("status", "UNKNOWN")
+        response = raw_result.get("response", "")
+        structured_output = raw_result.get("structured_output")
+        
+        # 1. Official structured_output handling
+        if structured_output is not None:
+            if not isinstance(structured_output, dict):
+                raise AgyProviderError(f"Agy CLI structured_output was not a JSON object: {structured_output}")
             try:
-                return schema.model_validate(coerced)
+                return schema.model_validate(structured_output)
             except ValidationError as ve:
-                logger.warning(f"Structured payload failed schema validation: {ve}\nPayload: {coerced}")
-
-        # Text fallback — extract last JSON object from assistant text OR the raw response string
+                logger.warning(f"Structured payload failed schema validation: {ve}\nPayload: {structured_output}")
+                raise AgyProviderError(
+                    f"Agy CLI produced structured_output that failed schema validation.\nPayload: {structured_output}\nError: {ve}"
+                ) from ve
+                
+        # 2. Text fallback — extract last JSON object from assistant text OR the raw response string
         fallback_text = final_text or ""
-        if isinstance(structured, str):
-            fallback_text += "\n" + structured
+        if isinstance(response, str):
+            fallback_text += "\n" + response
             
         if fallback_text.strip():
             parsed = _extract_last_json_object(fallback_text)
@@ -292,14 +291,12 @@ class AgyProvider(AgentProvider):
                         f"Fallback JSON extracted from agent text did not match schema: {ve}"
                     ) from ve
 
-        if coerced is not None:
-            raise AgyProviderError(
-                f"Agy CLI produced JSON that failed schema validation.\nPayload: {coerced}"
-            )
-
+        # 3. No valid JSON found anywhere
         raise AgyProviderError(
-            "Agy CLI did not produce a valid structured result matching the required schema. "
-            f"Raw text preview: {(final_text or '')[:300]!r}"
+            "Agy CLI did not produce a valid structured result matching the required schema.\n"
+            f"Status: {status}\n"
+            f"Structured output present: False\n"
+            f"Raw text preview: {fallback_text[:300]!r}"
         )
 
     # ------------------------------------------------------------------
@@ -520,15 +517,15 @@ class AgyProvider(AgentProvider):
         args, cwd = self._build_args(prompt, schema, system_instruction, workspaces)
 
         final_text = ""
-        structured_data = None
+        raw_result = None
 
         async for event in self._execute_process(args, cwd):
             if event["type"] == "text":
                 final_text += event.get("content", "")
             elif event["type"] == "__raw_result__":
-                structured_data = event["data"].get("structured_output") or event["data"].get("response")
+                raw_result = event["data"]
 
-        return self._validate_or_fallback(structured_data, final_text, schema)
+        return self._validate_or_fallback(raw_result, final_text, schema)
 
     async def stream_chat(
         self,
@@ -540,7 +537,7 @@ class AgyProvider(AgentProvider):
         args, cwd = self._build_args(prompt, schema, system_instruction, workspaces)
 
         final_text = ""
-        structured_data = None
+        raw_result = None
 
         async for event in self._execute_process(args, cwd):
             if event["type"] == "text":
@@ -549,7 +546,7 @@ class AgyProvider(AgentProvider):
             elif event["type"] in ("tool_call", "tool_result", "diagnostic", "init_info", "step_telemetry", "result_telemetry"):
                 yield event
             elif event["type"] == "__raw_result__":
-                structured_data = event["data"].get("structured_output") or event["data"].get("response")
+                raw_result = event["data"]
 
-        validated = self._validate_or_fallback(structured_data, final_text, schema)
+        validated = self._validate_or_fallback(raw_result, final_text, schema)
         yield {"type": "structured_output", "data": validated.model_dump()}
