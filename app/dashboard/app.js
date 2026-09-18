@@ -275,6 +275,7 @@ async function loadAll() {
     state.activity = results[4] || [];
     state.roles = results[5] || {};
     state.providers = results[6] || [];
+      state.telemetry = results[7] || { providers: {} };
     setConn(true);
   } catch (e) {
     setConn(false, e.message);
@@ -1000,12 +1001,12 @@ function viewSettings() {
         ),
         el("div", { class: "card-body", style: "flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px;" },
           el("div", { style: "display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-warm); padding: 8px 0;" },
-            el("span", { class: "faint", style: "font-weight: 500;", text: "Remaining Credits" }),
-            el("span", { style: "font-family: monospace;", text: "View Online" })
+            el("span", { class: "faint", style: "font-weight: 500;", text: "Estimated Usage" }),
+            el("span", { style: "font-family: monospace; color: var(--brand-burgundy-primary); font-weight: 600;", text: (state.telemetry && state.telemetry.providers && state.telemetry.providers[pId]) ? state.telemetry.providers[pId].estimated_cost : "$0.00" })
           ),
           el("div", { style: "display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-warm); padding: 8px 0;" },
-            el("span", { class: "faint", style: "font-weight: 500;", text: "Estimated Usage" }),
-            el("span", { style: "font-family: monospace;", text: "View Online" })
+            el("span", { class: "faint", style: "font-weight: 500;", text: "Tokens Analyzed" }),
+            el("span", { style: "font-family: monospace;", text: (state.telemetry && state.telemetry.providers && state.telemetry.providers[pId]) ? String(state.telemetry.providers[pId].input_tokens + state.telemetry.providers[pId].output_tokens) : "0" })
           ),
           el("div", { class: "mt", style: "display: flex; justify-content: center;" },
             url !== "#" ? 

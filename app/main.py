@@ -452,6 +452,102 @@ async def add_custom_provider(info: ProviderInfo):
     provider_registry.save_custom(info)
     return {"status": "success"}
 
+
+@app.get("/settings/telemetry")
+async def get_all_telemetry():
+    import sqlite3, json
+    
+    # We will estimate usage based on events and tasks.
+    # Pricing defaults: 
+    # Gemini (Agy) ~ $1.25/1M input, $5.00/1M output
+    # Abacus RouteLLM ~ $2.00/1M input, $10.00/1M output
+    
+    agy_input = 0
+    agy_output = 0
+    aba_input = 0
+    aba_output = 0
+    
+    try:
+        conn = sqlite3.connect("forgeflow.db")
+        conn.row_factory = sqlite3.Row
+        
+        # 1. Gather all tasks to know which agent ran what
+        tasks = {row["id"]: dict(row) for row in conn.execute("SELECT * FROM tasks").fetchall()}
+        
+        # 2. Gather all events to aggregate usage
+        events = conn.execute("SELECT * FROM task_events ORDER BY timestamp ASC").fetchall()
+        
+        current_agent_map = {} # task_id -> current agent
+        
+        for ev in events:
+            ev_type = ev["event_type"]
+            try:
+                payload = json.loads(ev["payload"])
+            except:
+                continue
+            
+            task_id = ev["task_id"]
+            
+            if ev_type == "STATE_CHANGED":
+                if "agent" in payload:
+                    current_agent_map[task_id] = payload["agent"].lower()
+            
+            if ev_type == "AGENT_CHUNK":
+                agent = current_agent_map.get(task_id, "")
+                is_abacus = "abacus" in agent or "reviewer" in agent
+                
+                # Agy telemetry
+                if payload.get("type") in ["step_telemetry", "result_telemetry"]:
+                    usage = payload.get("usage", {})
+                    if isinstance(usage, dict):
+                        inp = usage.get("input_tokens", usage.get("prompt_tokens", 0))
+                        out = usage.get("output_tokens", usage.get("completion_tokens", 0))
+                        
+                        if is_abacus:
+                            aba_input += inp
+                            aba_output += out
+                        else:
+                            agy_input += inp
+                            agy_output += out
+                
+                # Estimate text for Abacus if no strict usage was provided
+                elif is_abacus and payload.get("type") == "text":
+                    text_len = len(payload.get("content", ""))
+                    aba_output += int(text_len / 4.0)
+                
+                elif is_abacus and payload.get("type") == "structured_output":
+                    text_len = len(json.dumps(payload.get("data", {})))
+                    aba_output += int(text_len / 4.0)
+                    # Rough input estimate for review tasks
+                    aba_input += 15000 
+                    
+        conn.close()
+    except Exception as e:
+        print("Telemetry Error:", e)
+        pass
+
+    # Calculate costs
+    agy_cost = (agy_input / 1_000_000.0) * 1.25 + (agy_output / 1_000_000.0) * 5.00
+    aba_cost = (aba_input / 1_000_000.0) * 2.00 + (aba_output / 1_000_000.0) * 10.00
+    
+    return {
+        "status": "success",
+        "providers": {
+            "agy": {
+                "input_tokens": agy_input,
+                "output_tokens": agy_output,
+                "estimated_cost": f"${agy_cost:.4f}"
+            },
+            "abacus": {
+                "input_tokens": aba_input,
+                "output_tokens": aba_output,
+                "estimated_cost": f"${aba_cost:.4f}"
+            },
+            "openai": { "input_tokens": 0, "output_tokens": 0, "estimated_cost": "$0.00" },
+            "anthropic": { "input_tokens": 0, "output_tokens": 0, "estimated_cost": "$0.00" }
+        }
+    }
+
 @app.post("/system/restart")
 async def restart_system():
     # We return a success response, then trigger a background task to exit with code 42
