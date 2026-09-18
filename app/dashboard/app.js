@@ -731,15 +731,13 @@ function viewActivity() {
 }
 function viewMission() {
   const wrap = el("div", {});
-  const sel = el("select", { class: "search", style: "max-width: 400px; margin-bottom: 24px; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-warm);", onchange: (e) => selectMissionTask(e.target.value) },
-    el("option", { value: "", text: "-- Select a Task to view Mission Control --" }),
-    state.tasks.map((t) => el("option", {
-      value: t.id,
-      text: t.title + "  [" + t.status + "]",
-      selected: state.selectedTaskId === t.id ? "selected" : null
-    }))
+  const opts = [{ value: "", text: "-- Select a Task to view Mission Control --" }].concat(
+    state.tasks.map((t) => ({ value: t.id, text: t.title + "  [" + t.status + "]" }))
   );
-  wrap.appendChild(sel);
+  const dd = createDropdown(opts, state.selectedTaskId || "", (val) => selectMissionTask(val));
+  dd.style.maxWidth = "400px";
+  dd.style.marginBottom = "24px";
+  wrap.appendChild(dd);
 
   if (!state.selectedTaskId) {
     wrap.appendChild(el("div", { class: "card empty" }, emptyState("\u2398", "Select a task to open Mission Control.")));
@@ -1290,6 +1288,26 @@ async function openTask(id) {
   }
 
   /* ---------- actions ---------- */
+
+  async function selectMissionTask(taskId) {
+    state.selectedTaskId = taskId;
+    if (!taskId) {
+      state.taskEvents = [];
+      state.taskArtifacts = [];
+      render();
+      return;
+    }
+    try {
+      const r = await Promise.all([
+        api("/tasks/" + taskId + "/events").catch(() => []),
+        api("/tasks/" + taskId + "/artifacts").catch(() => [])
+      ]);
+      state.taskEvents = r[0] || [];
+      state.taskArtifacts = r[1] || [];
+    } catch (_) {}
+    render();
+  }
+
 async function runTask(id) {
   try {
     await api("/tasks/" + id + "/start", { method: "POST" });
