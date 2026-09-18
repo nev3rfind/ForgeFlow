@@ -308,6 +308,7 @@ class AgyProvider(AgentProvider):
         schema: Type[BaseModel],
         system_instruction: str,
         workspaces: list,
+        model: str = None,
     ) -> tuple:
         """Build CLI argument list and validated cwd.
 
@@ -533,8 +534,9 @@ class AgyProvider(AgentProvider):
         schema: Type[BaseModel],
         system_instruction: str,
         workspaces: list,
+        model: str = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        args, cwd = self._build_args(prompt, schema, system_instruction, workspaces)
+        args, cwd = self._build_args(prompt, schema, system_instruction, workspaces, model)
 
         final_text = ""
         raw_result = None

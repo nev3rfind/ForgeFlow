@@ -3,6 +3,7 @@ import logging
 import os
 from typing import Dict, Optional
 from app.models import Task, TaskState, Artifact
+from app.roles import role_router
 from app.services.task_service import TaskService
 from app.services.project_service import ProjectService
 from app.git.service import GitService
@@ -19,6 +20,21 @@ logger = logging.getLogger("forgeflow.orchestration")
 TERMINAL_STATES = {TaskState.COMPLETED, TaskState.FAILED, TaskState.STOPPED, TaskState.BLOCKED}
 
 class Orchestrator:
+    
+    def get_routed_provider(self, role: str):
+        cfg = role_router.get_role(role)
+        provider_name = cfg.provider
+        model = cfg.model
+        
+        provider_obj = self.provider
+        if provider_name == "abacus":
+            provider_obj = self.reviewer_provider or self.provider
+            
+        # Emit a quick internal event to notify the frontend which agent/role/model is active
+        # The frontend can capture this to update the UI
+        agent_name = "Abacus AI" if provider_name == "abacus" else "Google Antigravity"
+        return provider_obj, model, agent_name
+
     def __init__(
         self,
         task_service: TaskService,
@@ -231,10 +247,11 @@ class Orchestrator:
             
         elif task.status == TaskState.INVESTIGATING:
             prompt = f"Task: {task.title}\nDescription: {task.description}\nPlease investigate the root cause."
-            await self.task_service.update_status(task.id, TaskState.INVESTIGATING, agent="Antigravity / Investigator")
+            provider_obj, model, agent_name = self.get_routed_provider("investigator")
+            await self.task_service.update_status(task.id, TaskState.INVESTIGATING, agent=agent_name + " / Investigator")
             
             result = None
-            async for chunk in self.provider.stream_chat(prompt, InvestigationResult, INVESTIGATOR_SYSTEM, [task.current_worktree]):
+            async for chunk in provider_obj.stream_chat(prompt, InvestigationResult, INVESTIGATOR_SYSTEM, [task.current_worktree], model=model):
                 if self.cancellation_tokens.get(task.id) and self.cancellation_tokens[task.id].is_set():
                     return True
                 await self.task_service.emit_event(task.id, "AGENT_CHUNK", chunk)
@@ -256,10 +273,11 @@ class Orchestrator:
 
         elif task.status == TaskState.IMPLEMENTING:
             prompt = f"Task: {task.title}\nDescription: {task.description}\nIteration: {task.iteration}/{task.max_iterations}\nPlease implement the changes."
-            await self.task_service.update_status(task.id, TaskState.IMPLEMENTING, agent="Antigravity / Implementer")
+            provider_obj, model, agent_name = self.get_routed_provider("coder")
+            await self.task_service.update_status(task.id, TaskState.IMPLEMENTING, agent=agent_name + " / Implementer")
             
             result = None
-            async for chunk in self.provider.stream_chat(prompt, ImplementationResult, IMPLEMENTER_SYSTEM, [task.current_worktree]):
+            async for chunk in provider_obj.stream_chat(prompt, ImplementationResult, IMPLEMENTER_SYSTEM, [task.current_worktree], model=model):
                 if self.cancellation_tokens.get(task.id) and self.cancellation_tokens[task.id].is_set():
                     return True
                 await self.task_service.emit_event(task.id, "AGENT_CHUNK", chunk)
@@ -333,14 +351,15 @@ class Orchestrator:
                 f"Iteration: {task.iteration} of {task.max_iterations}\n"
                 f"Please review the implementation in the worktree against task requirements and test results."
             )
-            await self.task_service.update_status(task.id, TaskState.REVIEW, agent=reviewer_name)
+            provider_obj, model, agent_name = self.get_routed_provider("reviewer")
+            await self.task_service.update_status(task.id, TaskState.REVIEW, agent=agent_name + " / Reviewer")
             
             result = None
             review_failed = False
             error_message = None
 
             try:
-                async for chunk in self.reviewer_provider.stream_chat(prompt, ReviewResult, REVIEWER_SYSTEM, [task.current_worktree]):
+                async for chunk in provider_obj.stream_chat(prompt, ReviewResult, REVIEWER_SYSTEM, [task.current_worktree], model=model):
                     if self.cancellation_tokens.get(task.id) and self.cancellation_tokens[task.id].is_set():
                         return True
                     await self.task_service.emit_event(task.id, "AGENT_CHUNK", chunk)

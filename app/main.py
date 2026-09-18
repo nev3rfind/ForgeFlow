@@ -18,6 +18,8 @@ from app.integrations.agy_adapter import AgyProvider
 from app.integrations.abacus_adapter import AbacusReviewerProvider
 from app.orchestration.engine import Orchestrator, TERMINAL_STATES
 from app.models import Project, Task, TaskState
+from app.registry import provider_registry
+from app.roles import role_router, RoleConfig
 
 db = Database(settings.database_path)
 repo = Repository(db)
@@ -370,6 +372,22 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
         pass
     finally:
         event_bus.unsubscribe(task_id, callback)
+
+
+@app.get("/providers")
+def get_providers():
+    return [p.model_dump() for p in provider_registry.get_all()]
+
+@app.get("/settings/roles")
+def get_roles():
+    return {k: v.model_dump() for k, v in role_router.roles.items()}
+
+@app.put("/settings/roles/{role_name}")
+def update_role(role_name: str, config: RoleConfig):
+    if role_name not in role_router.roles:
+        raise HTTPException(status_code=404, detail="Role not found")
+    role_router.update_role(role_name, config.provider, config.model)
+    return role_router.get_role(role_name).model_dump()
 
 @app.post("/settings/reset-data")
 async def reset_data():

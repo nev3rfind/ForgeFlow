@@ -20,10 +20,10 @@ class DummyAgentProvider(AgentProvider):
         self.name = name
         self.call_history: List[str] = []
 
-    async def chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str]) -> Any:
+    async def chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str], model: str = None) -> Any:
         return None
 
-    async def stream_chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def stream_chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str], model: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         self.call_history.append(system_instruction)
         if "Investigator" in system_instruction:
             yield {"type": "structured_output", "data": {
@@ -56,10 +56,10 @@ class MockReviewerProvider(AgentProvider):
         self.malformed = malformed
         self.timeout = timeout
 
-    async def chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str]) -> Any:
+    async def chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str], model: str = None) -> Any:
         return None
 
-    async def stream_chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str]) -> AsyncGenerator[Dict[str, Any], None]:
+    async def stream_chat(self, prompt: str, schema: type[BaseModel], system_instruction: str, workspaces: list[str], model: str = None) -> AsyncGenerator[Dict[str, Any], None]:
         self.call_count += 1
         if self.timeout:
             raise asyncio.TimeoutError("Reviewer timeout")

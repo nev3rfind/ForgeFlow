@@ -181,6 +181,8 @@ const state = {
   tasks: [],
   overview: null,
   config: null,
+  roles: {},
+  providers: [],
   activity: [],
   selectedTaskId: null,
   taskEvents: [],
@@ -263,13 +265,17 @@ async function loadAll() {
       api("/tasks").catch(() => []),
       api("/overview").catch(() => null),
       api("/config").catch(() => null),
-      api("/activity?limit=200").catch(() => [])
+      api("/activity?limit=200").catch(() => []),
+      api("/settings/roles").catch(() => ({})),
+      api("/providers").catch(() => [])
     ]);
     state.projects = results[0] || [];
     state.tasks = results[1] || [];
     state.overview = results[2];
     state.config = results[3];
     state.activity = results[4] || [];
+    state.roles = results[5] || {};
+    state.providers = results[6] || [];
     setConn(true);
   } catch (e) {
     setConn(false, e.message);
@@ -695,29 +701,64 @@ function logLine(e) {
 
 function viewActivity() {
   const wrap = el("div", {});
-  const events = state.activity.slice().reverse();
-  wrap.appendChild(el("div", { class: "toolbar" },
-    el("span", { class: "faint mono", text: events.length + " events" }),
-    el("div", { class: "spacer" }),
-    el("button", { class: "btn sm", text: "Refresh", onclick: refresh })
-  ));
-  const card = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" }, el("h3", { text: "Event Stream" }))
-  );
-  const body = el("div", { class: "card-body" });
-  if (!events.length) {
-    body.appendChild(emptyState("\u2261", "No activity recorded yet."));
-  } else {
-    const log = el("div", { class: "log", style: "height:auto;max-height:620px" });
-    for (const e of events) log.appendChild(logLine(e));
-    body.appendChild(log);
+  wrap.appendChild(el("h2", { style: "margin-bottom: 24px;" }, "Live Activity Feed"));
+
+  if (!state.activity || !state.activity.length) {
+    wrap.appendChild(el("div", { class: "card empty" }, emptyState("\u223F", "No activity to display.")));
+    return wrap;
   }
-  card.appendChild(body);
-  wrap.appendChild(card);
+
+  const feedCard = el("div", { class: "card pad-0" });
+  const table = el("table", { class: "table" },
+    el("thead", {},
+      el("tr", {},
+        el("th", { text: "Time" }),
+        el("th", { text: "Task" }),
+        el("th", { text: "Agent" }),
+        el("th", { text: "Role" }),
+        el("th", { text: "Event" }),
+        el("th", { text: "Summary" })
+      )
+    ),
+    el("tbody", {})
+  );
+  const tbody = table.querySelector("tbody");
+
+  for (const e of state.activity) {
+    const t = taskById(e.task_id);
+    let taskName = t ? t.title : e.task_id.substring(0,8);
+    let sum = "-";
+    if (e.event_type === "STATE_CHANGED") sum = (e.payload.old_state || "NONE") + " \u2192 " + e.payload.new_state;
+    else if (e.event_type === "TOOL_CALL") sum = (e.payload.tool || "unknown") + "()";
+    else if (e.event_type === "ERROR") sum = String(e.payload.error).slice(0, 50) + "...";
+    else if (e.event_type === "AGENT_CHUNK") sum = "text chunk (" + String(e.payload.content || "").length + "b)";
+    else if (e.event_type === "ARTIFACT") sum = e.payload.name;
+    
+    // Find agent logic if present in payload or fallback to task agent
+    let agent = "System";
+    let role = "-";
+    if (e.event_type === "STATE_CHANGED" && e.payload.agent) {
+      agent = agentDisplayName(e.payload.agent);
+      role = agentRole(e.payload.agent);
+    } else if (t) {
+      agent = agentDisplayName(t.current_agent);
+      role = agentRole(t.current_agent);
+    }
+
+    tbody.appendChild(el("tr", {},
+      el("td", { class: "mono faint", text: fmtTime(e.timestamp) }),
+      el("td", { style: "font-weight: 500;" }, taskName),
+      el("td", { class: "mono", style: "color: var(--brand-burgundy);" }, agent),
+      el("td", { class: "badge pend" }, role),
+      el("td", {}, e.event_type),
+      el("td", { class: "mono faint" }, sum)
+    ));
+  }
+
+  feedCard.appendChild(table);
+  wrap.appendChild(feedCard);
   return wrap;
 }
-
-/* ---------- view: Mission Control ---------- */
 function viewMission() {
   const wrap = el("div", {});
   const sel = el("select", { class: "search", style: "max-width: 400px; margin-bottom: 24px; padding: 10px; border-radius: var(--radius-md); border: 1px solid var(--border-warm);", onchange: (e) => selectMissionTask(e.target.value) },
@@ -860,54 +901,75 @@ function viewMission() {
 }
 function viewSettings() {
   const wrap = el("div", {});
-  const cfg = state.config || {};
   
-  // Create sections as requested: GENERAL, AGENTS, TELEMETRY, WORKSPACE, DANGER ZONE
-  const genCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "General Runtime" })));
-  const agCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Agents (Agy / Abacus)" })));
-  const telCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Telemetry & Usage" })));
-  const wsCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "Workspace Paths" })));
-
-  const genB = el("div", { class: "card-body" });
-  const agB = el("div", { class: "card-body" });
-  const telB = el("div", { class: "card-body" });
-  const wsB = el("div", { class: "card-body" });
-
-  const keys = Object.keys(cfg).sort();
-  for (const k of keys) {
-    const v = cfg[k];
-    let node;
-    if (typeof v === "boolean") {
-      node = el("span", { class: "badge " + (v ? "green" : "gray"), text: v ? "true" : "false" });
-    } else if (v === null || v === undefined) {
-      node = el("span", { class: "faint", text: "-" });
-    } else {
-      node = el("span", { class: "mono", text: String(v) });
-    }
-    const row = el("div", { class: "kv" }, el("div", { class: "k mono", text: k }), el("div", { class: "v" }, node));
+  // Create sections: GENERAL, AGENT ROUTING, PROVIDERS, TELEMETRY, WORKSPACE, SECURITY, DANGER ZONE
+  
+  // --- AGENT ROUTING ---
+  const routeCard = el("div", { class: "mb" },
+    el("h3", { text: "Agent Routing", style: "margin-bottom: 16px; color: var(--brand-burgundy-deep);" }),
+    el("div", { class: "grid-3" })
+  );
+  const routeGrid = routeCard.querySelector(".grid-3");
+  
+  const rolenames = {
+    "orchestrator": "AI ORCHESTRATOR",
+    "investigator": "INVESTIGATOR",
+    "coder": "CODER / IMPLEMENTER",
+    "tester": "TESTER",
+    "qa": "QA",
+    "reviewer": "REVIEWER"
+  };
+  
+  for (const [rkey, rtitle] of Object.entries(rolenames)) {
+    const rc = state.roles[rkey] || { provider: "agy", model: "default" };
+    const p = state.providers.find(x => x.id === rc.provider) || { display_name: "Unknown", status: "Unavailable", models: [] };
     
-    if (k.includes("abacus") || k.includes("agy") || k.includes("reviewer") || k.includes("provider") || k.includes("model")) {
-      agB.appendChild(row);
-    } else if (k.includes("workspace") || k.includes("path") || k.includes("repository")) {
-      wsB.appendChild(row);
-    } else if (k.includes("telemetry") || k.includes("usage") || k.includes("token")) {
-      telB.appendChild(row);
-    } else {
-      genB.appendChild(row);
+    const provSel = el("select", { onchange: (e) => updateRole(rkey, e.target.value, "default") });
+    for (const pr of state.providers) {
+      if (pr.supported_roles.includes(rkey)) {
+        provSel.appendChild(el("option", { value: pr.id, text: pr.display_name, selected: pr.id === rc.provider ? "selected" : null }));
+      }
     }
+    
+    const modSel = el("select", { onchange: (e) => updateRole(rkey, rc.provider, e.target.value) });
+    for (const m of p.models) {
+      modSel.appendChild(el("option", { value: m.id, text: m.name, selected: m.id === rc.model ? "selected" : null }));
+    }
+    
+    const card = el("div", { class: "card pad-0", style: "display: flex; flex-direction: column;" },
+      el("div", { class: "card-head", style: "background: rgba(244, 162, 97, 0.05);" }, el("h4", { text: rtitle, style: "margin:0; font-size:13px; color: var(--brand-burgundy-primary);" })),
+      el("div", { class: "card-body", style: "flex: 1; display: flex; flex-direction: column; gap: 12px;" },
+        el("div", { class: "field", style: "margin:0" }, el("label", { text: "Provider" }), provSel),
+        el("div", { class: "field", style: "margin:0" }, el("label", { text: "Model" }), modSel),
+        el("div", { class: "flex", style: "margin-top: auto; padding-top: 8px;" },
+          el("div", { class: "dot " + (p.status === "Connected" ? "ok" : "err") }),
+          el("span", { class: "faint", style: "font-size:12px", text: "Status: " + p.status })
+        )
+      )
+    );
+    routeGrid.appendChild(card);
   }
-  
-  genCard.appendChild(genB);
-  agCard.appendChild(agB);
-  telCard.appendChild(telB);
-  wsCard.appendChild(wsB);
+  wrap.appendChild(routeCard);
 
-  wrap.appendChild(genCard);
-  wrap.appendChild(agCard);
-  wrap.appendChild(telCard);
-  wrap.appendChild(wsCard);
+  // --- PROVIDERS ---
+  const provWrap = el("div", { class: "mb" },
+    el("h3", { text: "Providers", style: "margin-bottom: 16px; color: var(--brand-burgundy-deep);" })
+  );
+  for (const p of state.providers) {
+    provWrap.appendChild(el("div", { class: "card flex", style: "justify-content: space-between; margin-bottom: 12px;" },
+      el("div", {},
+        el("div", { style: "font-weight: 600; font-size: 15px; margin-bottom: 4px;" }, p.display_name),
+        el("div", { class: "faint", style: "font-size: 13px;" }, "Supported roles: " + p.supported_roles.join(", "))
+      ),
+      el("div", { class: "flex" },
+        el("div", { class: "dot " + (p.status === "Connected" ? "ok" : "err") }),
+        el("span", { style: "font-weight: 500;", text: p.status })
+      )
+    ));
+  }
+  wrap.appendChild(provWrap);
 
-  // Danger Zone
+  // --- DANGER ZONE ---
   const dz = el("div", { class: "danger-zone mt" },
     el("h3", { text: "Danger Zone" }),
     el("div", { class: "danger-row" },
@@ -930,50 +992,14 @@ function viewSettings() {
   return wrap;
 }
 
-function promptClearTaskData() {
-  const body = el("div", {},
-    el("p", { html: "<strong>Clear all ForgeFlow task data?</strong><br/><br/>The following will be deleted:<br/>- Task records<br/>- Task events and history<br/>- Task artifacts<br/>- Obsolete task worktrees<br/><br/><em>Dartulator and manually maintained worktrees will NOT be deleted.</em><br/><br/><strong>Active tasks must be stopped first.</strong>" })
-  );
-  const btn = el("button", { class: "btn danger", text: "Yes, Clear Data" });
-  btn.onclick = async () => {
-    btn.disabled = true;
-    try {
-      await api("/settings/reset-data", { method: "POST" });
-      toast("Task data successfully cleared.", "ok");
-      closeModal();
-      refresh();
-    } catch (e) {
-      toast(e.message, "err");
-      btn.disabled = false;
-    }
-  };
-  openModal("Clear Task Data", body, [
-    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
-    btn
-  ]);
-}
-
-function promptResetConfig() {
-  const body = el("div", {},
-    el("p", { html: "<strong>Reset runtime configuration?</strong><br/><br/>This will restore provider settings, reviewer settings, and timeout values to defaults.<br/>Project registrations and repositories will NOT be changed." })
-  );
-  const btn = el("button", { class: "btn danger", text: "Yes, Reset Config" });
-  btn.onclick = async () => {
-    btn.disabled = true;
-    try {
-      await api("/settings/reset-config", { method: "POST" });
-      toast("Configuration reset.", "ok");
-      closeModal();
-      refresh();
-    } catch (e) {
-      toast(e.message, "err");
-      btn.disabled = false;
-    }
-  };
-  openModal("Reset Configuration", body, [
-    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
-    btn
-  ]);
+async function updateRole(role, provider, model) {
+  try {
+    await api(`/settings/roles/${role}`, { method: "PUT", body: { provider, model } });
+    toast("Role updated", "ok");
+    refresh();
+  } catch (e) {
+    toast(e.message, "err");
+  }
 }
 
 /* ---------- modals ---------- */

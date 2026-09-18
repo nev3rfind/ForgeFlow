@@ -193,7 +193,8 @@ class AbacusReviewerProvider(AgentProvider):
         prompt: str,
         schema: Type[BaseModel],
         system_instruction: str,
-        workspaces: List[str]
+        workspaces: List[str],
+        model: str = None
     ) -> AsyncGenerator[Dict[str, Any], None]:
         if not self.is_available():
             raise AbacusReviewerError(
