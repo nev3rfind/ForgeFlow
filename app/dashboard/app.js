@@ -351,141 +351,58 @@ function viewOverview() {
   const total = state.tasks.length;
   const completed = o.completed_tasks || 0;
   const failed = o.failed_tasks || 0;
-  const blocked = o.blocked_tasks || 0;
   const active = o.active_tasks || 0;
-  const rate = total ? Math.round((completed / total) * 100) : 0;
-
-  const counts = {};
-  for (const t of state.tasks) counts[t.status] = (counts[t.status] || 0) + 1;
-
+  
   const wrap = el("div", {});
-
-  /* KPI cards */
-  wrap.appendChild(el("div", { class: "grid cols-4 mb" },
-    statCard("Total Tasks", total, (o.projects || 0) + " projects", ""),
-    statCard("Active", active, (o.queued_tasks || 0) + " queued", active ? "info" : ""),
-    statCard("Completed", completed, rate + "% of all tasks", "ok"),
-    statCard("Needs Attention", failed + blocked, failed + " failed / " + blocked + " blocked", (failed + blocked) ? "err" : "")
-  ));
-
-  wrap.appendChild(el("div", { class: "grid cols-4 mb" },
-    statCard("Tests Passing", o.tests_passing || 0, "latest result per task", "ok"),
-    statCard("Tests Failing", o.tests_failing || 0, "latest result per task", (o.tests_failing || 0) ? "err" : ""),
-    statCard("Awaiting Review", o.awaiting_review || 0, "in REVIEW state", (o.awaiting_review || 0) ? "warn" : ""),
-    statCard("Projects", o.projects || 0, "registered", "")
-  ));
-
-  /* Active tasks - Mission Control summary */
-  const running = state.tasks.filter((t) => ACTIVE_STATES.indexOf(t.status) !== -1);
-  if (running.length > 0) {
-    const activeCard = el("div", { class: "card pad-0 mb" },
-      el("div", { class: "card-head" },
-        el("h3", { text: "Active Tasks" }),
-        el("div", { class: "spacer" }),
-        el("span", { class: "badge blue", text: running.length + " running" })
-      )
-    );
-    const ab = el("div", { class: "card-body" });
-    for (const t of running) {
-      const agent = agentDisplayName(t.current_agent);
-      ab.appendChild(el("div", { class: "kv", style: "cursor:pointer", onclick: () => { go("mission"); selectMissionTask(t.id); } },
-        el("div", { class: "k" },
-          el("strong", { text: t.title }),
-          el("span", { style: "margin-left:12px" }, statusBadge(t.status)),
-          agent ? el("span", { class: "agent-badge", text: agent, style: "margin-left:8px" }) : null
-        ),
-        el("div", { class: "v" },
-          t.started_at ? liveTimer(t.started_at) : el("span", { class: "faint", text: "-" })
-        )
-      ));
-    }
-    activeCard.appendChild(ab);
-    wrap.appendChild(activeCard);
-  }
-
-  const cols = el("div", { class: "grid cols-2" });
-
-  /* status distribution */
-  const dist = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" }, el("h3", { text: "Status Distribution" }))
-  );
-  const distBody = el("div", { class: "card-body" });
-  const keys = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
-  if (!keys.length) {
-    distBody.appendChild(emptyState("\u25CB", "No tasks yet"));
-  } else {
-    for (const k of keys) {
-      const pct = total ? Math.round((counts[k] / total) * 100) : 0;
-      distBody.appendChild(el("div", { class: "mb" },
-        el("div", { class: "flex", style: "justify-content:space-between;margin-bottom:5px" },
-          statusBadge(k),
-          el("span", { class: "mono faint", text: counts[k] + "  (" + pct + "%)" })
-        ),
-        el("div", { class: "progress" }, el("div", { style: "width:" + pct + "%" }))
-      ));
-    }
-  }
-  dist.appendChild(distBody);
-  cols.appendChild(dist);
-
-  /* recent tasks */
-  const recent = el("div", { class: "card pad-0" },
-    el("div", { class: "card-head" },
-      el("h3", { text: "Recent Tasks" }),
-      el("div", { class: "spacer" }),
-      el("button", { class: "btn sm ghost", text: "View all", onclick: () => go("tasks") })
+  wrap.appendChild(el("h2", { style: "margin-bottom: 24px;" }, "System Overview"));
+  
+  const grid = el("div", { class: "grid-4 mb" },
+    el("div", { class: "metric-card" },
+      el("div", { class: "label" }, "Total Tasks"),
+      el("div", { class: "val" }, total),
+      el("div", { class: "icon" }, "\u2261")
+    ),
+    el("div", { class: "metric-card orange" },
+      el("div", { class: "label" }, "Active"),
+      el("div", { class: "val" }, active),
+      el("div", { class: "icon" }, "\u2398")
+    ),
+    el("div", { class: "metric-card green" },
+      el("div", { class: "label" }, "Completed"),
+      el("div", { class: "val" }, completed),
+      el("div", { class: "icon" }, "\u2713")
+    ),
+    el("div", { class: "metric-card red" },
+      el("div", { class: "label" }, "Needs Attention"),
+      el("div", { class: "val" }, failed),
+      el("div", { class: "icon" }, "\u26A0")
     )
   );
-  const recentBody = el("div", { class: "card-body" });
-  const sorted = state.tasks.slice().sort((a, b) => String(b.updated_at || "").localeCompare(String(a.updated_at || ""))).slice(0, 6);
-  if (!sorted.length) {
-    recentBody.appendChild(emptyState("\u2630", "No tasks yet"));
-  } else {
-    for (const t of sorted) {
-      recentBody.appendChild(el("div", { class: "kv", style: "cursor:pointer", onclick: () => openTask(t.id) },
-        el("div", { class: "k truncate", text: t.title }),
-        el("div", { class: "v" }, statusBadge(t.status))
-      ));
-    }
-  }
-  recent.appendChild(recentBody);
-  cols.appendChild(recent);
-  wrap.appendChild(cols);
+  wrap.appendChild(grid);
 
-  /* System health + provider info */
-  const cfg = state.config || {};
-  const health = el("div", { class: "card pad-0 mt" },
-    el("div", { class: "card-head" }, el("h3", { text: "System" }))
+  const sysCard = el("div", { class: "card pad-0 mt" },
+    el("div", { class: "card-head" }, el("h3", { text: "Live System", style: "margin:0;" }))
   );
-  const hb = el("div", { class: "card-body" });
-  const providerName = cfg.implementation_provider === "agy" ? "Google Antigravity (agy CLI)" : (cfg.implementation_provider || "antigravity");
-  hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Worker Provider" }),
-    el("div", { class: "v" }, el("span", { class: "agent-badge", text: providerName }))
-  ));
-  hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Abacus Reviewer" }),
-    el("div", { class: "v" }, el("span", { class: "badge " + (cfg.abacus_reviewer_enabled ? "green" : "gray"), text: cfg.abacus_reviewer_enabled ? "Enabled" : "Disabled" }))
-  ));
-  hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Review Mode" }),
-    el("div", { class: "v mono", text: cfg.abacus_review_mode || "-" })
-  ));
-  hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Fallback" }),
-    el("div", { class: "v" }, el("span", { class: "badge " + (cfg.abacus_fallback_enabled ? "amber" : "gray"), text: cfg.abacus_fallback_enabled ? "Enabled" : "Disabled" }))
-  ));
-  hb.appendChild(el("div", { class: "kv" },
-    el("div", { class: "k", text: "Abacus Usage" }),
-    el("div", { class: "v faint", text: "Not exposed by current integration" })
-  ));
-  health.appendChild(hb);
-  wrap.appendChild(health);
-
+  const sysBody = el("div", { class: "card-body grid-2" });
+  
+  for (const r of ["orchestrator", "investigator", "coder", "reviewer"]) {
+    const rc = (state.roles || {})[r] || {};
+    const p = (state.providers || []).find(x => x.id === rc.provider) || { display_name: "Unknown" };
+    sysBody.appendChild(
+      el("div", { class: "field" },
+        el("label", { style: "text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; margin-bottom: 4px;" }, r),
+        el("div", { class: "mono", style: "font-size: 14px; font-weight: 600; color: var(--brand-burgundy-deep);" }, p.display_name),
+        el("div", { class: "faint mono", style: "font-size: 12px; margin-top: 4px;" }, "Model: " + (rc.model || "default"))
+      )
+    );
+  }
+  sysCard.appendChild(sysBody);
+  wrap.appendChild(sysCard);
+  
   return wrap;
 }
 
-/* ---------- view: Projects ---------- */
+  /* ---------- view: Projects ---------- */
 function viewProjects() {
   const wrap = el("div", {});
   wrap.appendChild(el("div", { class: "toolbar", style: "display: flex; gap: 12px; margin-bottom: 24px;" },
@@ -1219,4 +1136,29 @@ document.addEventListener("DOMContentLoaded", () => {
   render();
   loadAll();
   setInterval(() => { if (!state.ws) loadAll(); }, 15000);
+});
+
+
+/* ---------- Theme ---------- */
+function toggleTheme() {
+  const current = document.documentElement.getAttribute("data-theme");
+  const next = current === "dark" ? "light" : "dark";
+  document.documentElement.setAttribute("data-theme", next);
+  localStorage.setItem("forgeflow-theme", next);
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem("forgeflow-theme");
+  if (saved) document.documentElement.setAttribute("data-theme", saved);
+  
+  // Create theme toggle button in topbar
+  const tb = document.querySelector(".topbar");
+  if (tb) {
+    const btn = document.createElement("button");
+    btn.className = "btn sm ghost";
+    btn.style.marginLeft = "8px";
+    btn.innerText = "Toggle Theme";
+    btn.onclick = toggleTheme;
+    tb.appendChild(btn);
+  }
 });
