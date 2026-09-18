@@ -761,6 +761,11 @@ function viewMission() {
   /* ===== Left Sidebar: Status & Info ===== */
   const left = el("div", { class: "mc-panel" });
 
+  const getLastStateEntryTime = () => {
+    if (!state.stateHistory || !state.stateHistory.length) return null;
+    return state.stateHistory[state.stateHistory.length - 1].timestamp;
+  };
+
   // Main Status Card
   const currentElapsed = isTerminal ? null : (getLastStateEntryTime() || t.started_at);
   const statCard = el("div", { class: "stat-card" },
@@ -1324,6 +1329,7 @@ async function openTask(id) {
       ]);
       state.taskEvents = r[0] || [];
       state.taskArtifacts = r[1] || [];
+      state.stateHistory = state.taskEvents.filter(e => e.event_type === "STATE_CHANGED");
     } catch (_) {}
     render();
   }

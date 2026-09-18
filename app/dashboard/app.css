@@ -265,6 +265,7 @@ h1, h2, h3, h4 { margin-top: 0; font-weight: 600; color: var(--heading-color); }
 
 /* BUTTONS */
 .btn {
+  white-space: nowrap;
   background: var(--card-bg);
   border: 1px solid var(--border-warm);
   color: var(--text-main);
