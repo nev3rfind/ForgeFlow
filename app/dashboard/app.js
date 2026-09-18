@@ -927,6 +927,41 @@ function viewSettings() {
     );
     wrap.appendChild(apiWrap);
     
+    // --- TELEMETRY & BILLING ---
+    const billWrap = el("div", { class: "mb mt" },
+      el("h3", { text: "Telemetry & Billing", style: "margin-bottom: 16px; color: var(--heading-color);" }),
+      el("div", { class: "card pad-0", style: "display: flex; flex-direction: column;" },
+        el("div", { class: "card-head", style: "background: rgba(244, 162, 97, 0.05);" },
+          el("h4", { text: "Abacus.AI Account Status", style: "margin:0; font-size:13px; color: var(--brand-burgundy-primary);" })
+        ),
+        el("div", { class: "card-body", style: "flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px;" },
+          el("div", { id: "abacus-billing-content", text: "Loading billing data..." })
+        )
+      )
+    );
+    wrap.appendChild(billWrap);
+    
+    // Fetch and populate billing
+    api("/providers/abacus/billing").then(res => {
+      const c = document.getElementById("abacus-billing-content");
+      if (c && res.status === "success") {
+        c.innerHTML = "";
+        
+        const makeRow = (label, val, highlight) => {
+          return el("div", { style: "display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-warm); padding: 8px 0;" },
+            el("span", { class: "faint", style: "font-weight: 500;", text: label }),
+            el("span", { style: highlight ? "color: var(--brand-burgundy-primary); font-weight: 600;" : "font-family: monospace;", text: val })
+          );
+        };
+        
+        c.appendChild(makeRow("Plan Tier", res.plan, true));
+        c.appendChild(makeRow("Remaining Credits", res.credits_remaining, false));
+        c.appendChild(makeRow("Estimated Usage", res.estimated_usage, false));
+        
+        c.appendChild(el("div", { class: "mt faint", style: "font-size: 11px; text-align: center; font-style: italic; background: rgba(0,0,0,0.03); padding: 8px; border-radius: 4px;" }, res.message));
+      }
+    }).catch(e => console.error(e));
+
     // --- CONFIGURATION ---
   const cfg = state.config || {};
   const genCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "System Configuration" })));
@@ -1286,6 +1321,37 @@ function createDropdown(options, selectedValue, onChange) {
   const menu = document.createElement("div");
   menu.className = "cs-menu";
   
+  // Add Search Input if options are many
+  let searchInput = null;
+  if (options.length > 5) {
+    const searchWrap = document.createElement("div");
+    searchWrap.style.padding = "8px";
+    searchWrap.style.borderBottom = "1px solid var(--border-warm)";
+    
+    searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Search...";
+    searchInput.className = "search";
+    searchInput.style.width = "100%";
+    searchInput.style.padding = "6px 10px";
+    searchInput.style.borderRadius = "4px";
+    searchInput.style.border = "1px solid var(--border-warm)";
+    searchInput.style.background = "var(--input-bg)";
+    searchInput.style.color = "var(--text-main)";
+    
+    searchInput.onclick = (e) => e.stopPropagation();
+    searchInput.oninput = () => {
+      const q = searchInput.value.toLowerCase();
+      Array.from(menu.querySelectorAll(".cs-option")).forEach(opt => {
+        if (opt.innerText.toLowerCase().includes(q)) opt.style.display = "";
+        else opt.style.display = "none";
+      });
+    };
+    
+    searchWrap.appendChild(searchInput);
+    menu.appendChild(searchWrap);
+  }
+  
   const updateDisplay = () => {
     const opt = options.find(o => o.value === currentVal) || options[0];
     selectedText.innerText = opt ? opt.text : "";
@@ -1302,8 +1368,9 @@ function createDropdown(options, selectedValue, onChange) {
       currentVal = opt.value;
       updateDisplay();
       wrap.classList.remove("open");
-      Array.from(menu.children).forEach(c => c.classList.remove("active"));
+      Array.from(menu.querySelectorAll(".cs-option")).forEach(c => c.classList.remove("active"));
       item.classList.add("active");
+      if (searchInput) { searchInput.value = ""; searchInput.dispatchEvent(new Event('input')); }
       if (onChange) onChange(currentVal);
     };
     menu.appendChild(item);
@@ -1313,10 +1380,14 @@ function createDropdown(options, selectedValue, onChange) {
   
   selectedDisplay.onclick = (e) => {
     e.stopPropagation();
+    const wasOpen = wrap.classList.contains("open");
     document.querySelectorAll(".custom-select.open").forEach(c => {
       if (c !== wrap) c.classList.remove("open");
     });
     wrap.classList.toggle("open");
+    if (!wasOpen && searchInput) {
+      setTimeout(() => searchInput.focus(), 50);
+    }
   };
   
   wrap.appendChild(selectedDisplay);
