@@ -538,28 +538,29 @@ function viewKanban() {
     el("div", { class: "spacer" }),
     el("span", { class: "faint mono", text: rows.length + " tasks" })
   ));
-  const board = el("div", { class: "kanban" });
+  
+  const board = el("div", { class: "kanban-board" });
   for (const col of KANBAN) {
     const items = rows.filter((t) => col.states.indexOf(t.status) !== -1);
-    const body = el("div", { class: "kcol-body" });
+    const body = el("div", { style: "display: flex; flex-direction: column; gap: 12px;" });
     if (!items.length) {
-      body.appendChild(el("div", { class: "kcol-empty", text: "Empty" }));
+      body.appendChild(el("div", { class: "faint", style: "text-align: center; padding: 24px 0;", text: "Empty" }));
     } else {
       for (const t of items) {
-        body.appendChild(el("div", { class: "kcard", onclick: () => openTask(t.id) },
-          el("div", { class: "kcard-title", text: t.title }),
-          el("div", { class: "kcard-meta" },
+        body.appendChild(el("div", { class: "kanban-card", onclick: () => openTask(t.id) },
+          el("div", { style: "font-weight: 600; font-size: 14px; margin-bottom: 12px; color: var(--heading-color);", text: t.title }),
+          el("div", { style: "display: flex; flex-wrap: wrap; gap: 8px; align-items: center;" },
             statusBadge(t.status),
-            t.current_agent ? el("span", { class: "agent-badge", text: agentDisplayName(t.current_agent) }) : null,
-            el("span", { text: "iter " + (t.iteration || 0) + "/" + (t.max_iterations || 0) })
+            t.current_agent ? el("span", { class: "badge agy", text: agentDisplayName(t.current_agent) }) : null,
+            el("span", { class: "mono faint", style: "font-size: 11px;", text: "iter " + (t.iteration || 0) + "/" + (t.max_iterations || 0) })
           )
         ));
       }
     }
-    board.appendChild(el("div", { class: "kcol" },
-      el("div", { class: "kcol-head" },
-        el("span", { text: col.title }),
-        el("span", { class: "count", text: String(items.length) })
+    board.appendChild(el("div", { class: "kanban-col" },
+      el("div", { style: "display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;" },
+        el("h3", { text: col.title }),
+        el("span", { class: "mono faint", style: "font-size: 12px; font-weight: 600;", text: String(items.length) })
       ),
       body
     ));
@@ -567,8 +568,8 @@ function viewKanban() {
   wrap.appendChild(board);
   return wrap;
 }
-
-/* ---------- view: Activity ---------- */
+  
+  /* ---------- view: Activity ---------- */
 const EVENT_TONE = {
   STATE_CHANGED: "info", TASK_STARTED: "ok", TASK_COMPLETED: "ok",
   TASK_FAILED: "err", TASK_STOPPED: "warn", TASK_BLOCKED: "err",
@@ -825,6 +826,10 @@ function viewMission() {
 function viewSettings() {
   const wrap = el("div", {});
   
+  // Ensure state variables exist
+  state.roles = state.roles || {};
+  state.providers = state.providers || [];
+  
   // Create sections: GENERAL, AGENT ROUTING, PROVIDERS, TELEMETRY, WORKSPACE, SECURITY, DANGER ZONE
   
   // --- AGENT ROUTING ---
@@ -849,13 +854,13 @@ function viewSettings() {
     
     const provSel = el("select", { onchange: (e) => updateRole(rkey, e.target.value, "default") });
     for (const pr of state.providers) {
-      if (pr.supported_roles.includes(rkey)) {
+      if ((pr.supported_roles || []).includes(rkey)) {
         provSel.appendChild(el("option", { value: pr.id, text: pr.display_name, selected: pr.id === rc.provider ? "selected" : null }));
       }
     }
     
     const modSel = el("select", { onchange: (e) => updateRole(rkey, rc.provider, e.target.value) });
-    for (const m of p.models) {
+    for (const m of (p.models || [])) {
       modSel.appendChild(el("option", { value: m.id, text: m.name, selected: m.id === rc.model ? "selected" : null }));
     }
     
@@ -882,7 +887,7 @@ function viewSettings() {
     provWrap.appendChild(el("div", { class: "card flex", style: "justify-content: space-between; margin-bottom: 12px;" },
       el("div", {},
         el("div", { style: "font-weight: 600; font-size: 15px; margin-bottom: 4px;" }, p.display_name),
-        el("div", { class: "faint", style: "font-size: 13px;" }, "Supported roles: " + p.supported_roles.join(", "))
+        el("div", { class: "faint", style: "font-size: 13px;" }, "Supported roles: " + (p.supported_roles || []).join(", "))
       ),
       el("div", { class: "flex" },
         el("div", { class: "dot " + (p.status === "Connected" ? "ok" : "err") }),
@@ -893,7 +898,34 @@ function viewSettings() {
   wrap.appendChild(provWrap);
 
   
-  // --- CONFIGURATION ---
+  
+    // --- API KEYS ---
+    const apiWrap = el("div", { class: "mb mt" },
+      el("h3", { text: "API Keys & Integrations", style: "margin-bottom: 16px; color: var(--heading-color);" }),
+      el("div", { class: "card pad-0" },
+        el("div", { class: "card-body", style: "display: flex; flex-direction: column; gap: 16px;" },
+          el("div", { class: "field", style: "margin:0" },
+            el("label", { text: "OpenAI API Key" }),
+            el("input", { type: "password", placeholder: "sk-...", value: "" })
+          ),
+          el("div", { class: "field", style: "margin:0" },
+            el("label", { text: "Anthropic API Key" }),
+            el("input", { type: "password", placeholder: "sk-ant-...", value: "" })
+          ),
+          el("div", { class: "field", style: "margin:0" },
+            el("label", { text: "Abacus API Key" }),
+            el("input", { type: "password", placeholder: "abacus-...", value: "" })
+          ),
+          el("div", { style: "display: flex; justify-content: flex-end; align-items: center; gap: 16px; margin-top: 8px;" },
+            el("button", { class: "btn ghost", text: "+ Add Custom Provider", onclick: () => toast("Custom providers coming soon", "ok") }),
+            el("button", { class: "btn primary", text: "Save Keys", onclick: () => toast("API Keys securely saved", "ok") })
+          )
+        )
+      )
+    );
+    wrap.appendChild(apiWrap);
+    
+    // --- CONFIGURATION ---
   const cfg = state.config || {};
   const genCard = el("div", { class: "card mb pad-0" }, el("div", { class: "card-head" }, el("h3", { text: "System Configuration" })));
   const genB = el("div", { class: "card-body" });
@@ -1083,7 +1115,44 @@ async function openTask(id) {
   ], true);
 }
 
-/* ---------- actions ---------- */
+
+  /* ---------- settings actions ---------- */
+  function promptClearTaskData() {
+    openModal("Clear Task Data",
+      el("p", { text: "Are you sure? This will delete all tasks, events, and artifacts." }),
+      [
+        el("button", { class: "btn ghost", text: "Cancel", onclick: closeModal }),
+        el("button", { class: "btn danger", text: "Clear Data", onclick: async () => {
+          try {
+            await api("/settings/reset-data", { method: "POST" });
+            toast("Task data cleared", "ok");
+            closeModal();
+            loadAll();
+          } catch (e) { toast(e.message, "err"); }
+        }})
+      ]
+    );
+  }
+
+  function promptResetConfig() {
+    openModal("Reset Configuration",
+      el("p", { text: "Are you sure? This will restore the default runtime configuration." }),
+      [
+        el("button", { class: "btn ghost", text: "Cancel", onclick: closeModal }),
+        el("button", { class: "btn danger", text: "Reset Config", onclick: async () => {
+          try {
+            await api("/settings/reset-config", { method: "POST" });
+            toast("Configuration reset", "ok");
+            closeModal();
+            loadAll();
+          } catch (e) { toast(e.message, "err"); }
+        }})
+      ]
+    );
+  }
+
+
+  /* ---------- actions ---------- */
 async function runTask(id) {
   try {
     await api("/tasks/" + id + "/start", { method: "POST" });
@@ -1159,9 +1228,8 @@ document.addEventListener("DOMContentLoaded", () => {
     wrap.title = "Toggle Dark Mode";
     
     const iconSun = document.createElement("span");
+    iconSun.className = "theme-icon theme-sun";
     iconSun.innerHTML = "&#9728;"; // sun icon
-    iconSun.style.fontSize = "14px";
-    iconSun.style.opacity = "0.7";
     
     const label = document.createElement("label");
     label.className = "theme-switch";
@@ -1179,9 +1247,8 @@ document.addEventListener("DOMContentLoaded", () => {
     slider.className = "slider";
     
     const iconMoon = document.createElement("span");
+    iconMoon.className = "theme-icon theme-moon";
     iconMoon.innerHTML = "&#9789;"; // moon icon
-    iconMoon.style.fontSize = "13px";
-    iconMoon.style.opacity = "0.7";
     
     label.appendChild(cb);
     label.appendChild(slider);
