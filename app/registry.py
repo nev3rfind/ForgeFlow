@@ -63,7 +63,7 @@ provider_registry.register(ProviderInfo(
     id="agy",
     display_name="Google Antigravity",
     status="Connected",
-    supported_roles=["orchestrator", "investigator", "coder", "tester", "qa"],
+    supported_roles=["orchestrator", "investigator", "coder", "tester", "qa", "reviewer"],
     models=[
         ProviderModel(id="default", name="Default Model"),
         ProviderModel(id="flash", name="Flash (Fast)"),
