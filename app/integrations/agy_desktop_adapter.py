@@ -20,11 +20,9 @@ class AgyDesktopAdapter(BaseProvider):
         self.rpa = DesktopRPAEngine(app_title_regex=window_title)
         
     def is_available(self) -> bool:
-        # Check if the pywinauto dependencies are loaded and windows exist
         try:
-            from pywinauto import Desktop
-            windows = Desktop(backend="uia").windows(title_re=self.rpa.app_title_regex)
-            return len(windows) > 0
+            best_window, _ = self.rpa._find_robust_antigravity_window()
+            return best_window is not None
         except Exception:
             return False
 

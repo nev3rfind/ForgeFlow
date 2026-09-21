@@ -1,13 +1,18 @@
 import time
 import pyperclip
 import logging
-from pywinauto import Desktop, Application
+import ctypes
+from ctypes.wintypes import DWORD, MAX_PATH
+import re
+from pywinauto import Application
 from pywinauto.keyboard import send_keys
 
 logger = logging.getLogger(__name__)
 
 class RPAEngineError(Exception):
-    pass
+    def __init__(self, message, diagnostic=""):
+        super().__init__(message)
+        self.diagnostic = diagnostic
 
 class DesktopRPAEngine:
     def __init__(self, app_title_regex: str, backend: str = "uia"):
@@ -16,40 +21,119 @@ class DesktopRPAEngine:
         self.app = None
         self.main_window = None
 
+    def _get_process_name_by_hwnd(self, hwnd):
+        user32 = ctypes.windll.user32
+        kernel32 = ctypes.windll.kernel32
+        psapi = ctypes.windll.psapi
+        
+        pid = DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        hProcess = kernel32.OpenProcess(0x0410, False, pid)
+        if not hProcess:
+            return ""
+        exe_name = ctypes.create_unicode_buffer(MAX_PATH)
+        psapi.GetModuleBaseNameW(hProcess, None, exe_name, MAX_PATH)
+        kernel32.CloseHandle(hProcess)
+        return exe_name.value.lower()
+
+    def _find_robust_antigravity_window(self):
+        user32 = ctypes.windll.user32
+        EnumWindows = user32.EnumWindows
+        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+        GetWindowText = user32.GetWindowTextW
+        GetWindowTextLength = user32.GetWindowTextLengthW
+        IsWindowVisible = user32.IsWindowVisible
+
+        candidates = []
+        diagnostics = []
+        
+        title_pattern = re.compile(r'^(Google\s+)?Antigravity(\s+IDE)?$', re.IGNORECASE)
+        broad_title_pattern = re.compile(self.app_title_regex, re.IGNORECASE)
+
+        def foreach_window(hwnd, lParam):
+            if not IsWindowVisible(hwnd):
+                return True
+                
+            length = GetWindowTextLength(hwnd)
+            if not (0 < length < 10000):
+                return True
+                
+            buff = ctypes.create_unicode_buffer(length + 1)
+            GetWindowText(hwnd, buff, length + 1)
+            title = buff.value.strip()
+            
+            # Fast filter to only process windows with something loosely matching our interests
+            # to avoid spamming process checks on every window
+            if not broad_title_pattern.search(title):
+                return True
+                
+            proc_name = self._get_process_name_by_hwnd(hwnd)
+            
+            # STRONG EXCLUSION: Never attach to ForgeFlow dashboard
+            if "forgeflow" in title.lower() or "localhost" in title.lower() or "chrome is being controlled" in title.lower():
+                diagnostics.append(f"- Ignored unsafe window: '{title}' (Process: {proc_name}) - Matches ForgeFlow Dashboard.")
+                return True
+                
+            score = 0
+            
+            # Signal 1: Process Name
+            if proc_name == "antigravity.exe":
+                score += 10
+            elif proc_name in ("electron.exe", "chrome.exe", "msedge.exe"):
+                score += 2
+                
+            # Signal 2: Window Title
+            if title_pattern.match(title):
+                score += 10
+            elif broad_title_pattern.search(title):
+                score += 5
+                
+            candidates.append({
+                "hwnd": hwnd,
+                "title": title,
+                "process": proc_name,
+                "score": score
+            })
+                
+            return True
+
+        EnumWindows(EnumWindowsProc(foreach_window), 0)
+        
+        if not candidates:
+            diag_str = "Matching Criteria Used:\n"
+            diag_str += f"- Title must broadly match: {self.app_title_regex}\n"
+            diag_str += "- Must not be the ForgeFlow dashboard.\n\n"
+            diag_str += "Result: No windows found matching these criteria.\n"
+            if diagnostics:
+                diag_str += "Ignored:\n" + "\n".join(diagnostics)
+            return None, diag_str
+            
+        # Sort by highest score
+        candidates.sort(key=lambda x: x["score"], reverse=True)
+        best = candidates[0]
+        
+        if best["score"] < 5:
+            diag_str = "Found candidates, but confidence was too low:\n"
+            for c in candidates:
+                diag_str += f"- '{c['title']}' ({c['process']}) - Score: {c['score']}\n"
+            return None, diag_str
+            
+        return best, f"Found target: '{best['title']}' (Process: {best['process']})"
+
     def connect(self):
         """Attempts to locate the application window and bring it to the foreground."""
         try:
-            logger.info(f"RPA: Searching for window matching '{self.app_title_regex}'")
+            logger.info("RPA: Searching for robust window match...")
+            best_window, diagnostic = self._find_robust_antigravity_window()
             
-            import ctypes
-            import re
+            if not best_window:
+                raise RPAEngineError("Antigravity application not detected", diagnostic=diagnostic)
+                
+            hwnd = best_window["hwnd"]
             
-            EnumWindows = ctypes.windll.user32.EnumWindows
-            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
-            GetWindowText = ctypes.windll.user32.GetWindowTextW
-            GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
-            IsWindowVisible = ctypes.windll.user32.IsWindowVisible
-
-            matches = []
-            pattern = re.compile(self.app_title_regex, re.IGNORECASE)
-
-            def foreach_window(hwnd, lParam):
-                if IsWindowVisible(hwnd):
-                    length = GetWindowTextLength(hwnd)
-                    if 0 < length < 10000:
-                        buff = ctypes.create_unicode_buffer(length + 1)
-                        GetWindowText(hwnd, buff, length + 1)
-                        title = buff.value
-                        if pattern.search(title):
-                            matches.append(hwnd)
-                return True
-
-            EnumWindows(EnumWindowsProc(foreach_window), 0)
+            # The diagnostic message contains the success information for the caller
+            self.last_diagnostic = diagnostic
             
-            if not matches:
-                raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
-            
-            hwnd = matches[0]
             self.app = Application(backend=self.backend).connect(handle=hwnd)
             self.main_window = self.app.window(handle=hwnd)
             
@@ -63,9 +147,11 @@ class DesktopRPAEngine:
                 self.main_window.set_focus()
                 
             return True
+        except RPAEngineError:
+            raise
         except Exception as e:
             logger.error(f"RPA Connection Error: {e}")
-            raise RPAEngineError(f"Failed to connect to application: {e}")
+            raise RPAEngineError("An unexpected error occurred during RPA connection", diagnostic=str(e))
 
     def paste_text(self, text: str):
         """Pastes text directly from the clipboard to avoid slow keyboard typing."""
@@ -73,21 +159,17 @@ class DesktopRPAEngine:
             raise RPAEngineError("Not connected to any application")
             
         logger.debug("RPA: Pasting text via clipboard")
-        # Save old clipboard content
         old_clipboard = pyperclip.paste()
         try:
             pyperclip.copy(text)
-            time.sleep(0.1) # Small delay to ensure clipboard is ready
-            # Send Ctrl+V
+            time.sleep(0.1)
             send_keys('^v')
             time.sleep(0.1)
         finally:
-            # Optionally restore old clipboard, but it might interfere if pasted async
             pass
 
     def send_keystrokes(self, keys: str):
         """Sends key strokes to the active window."""
-        logger.debug(f"RPA: Sending keystrokes: {keys}")
         send_keys(keys)
         time.sleep(0.1)
 
@@ -96,9 +178,4 @@ class DesktopRPAEngine:
         return pyperclip.paste()
         
     def wait_for_ui_ready(self, timeout_secs: int = 120, check_interval: float = 2.0):
-        """
-        Generic wait function. Because electron apps don't easily expose busy states,
-        this will likely need to be customized per-app (e.g. searching for a 'Stop' button).
-        """
-        # For now, this is a placeholder that adapters can build on top of.
         pass

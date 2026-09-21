@@ -956,16 +956,22 @@ function viewSettings() {
           class: "btn sm ghost", 
           text: "Test Connection", 
           onclick: () => {
-            toast("Testing RPA Connection...", "info");
+            toast("Searching for Antigravity...", "info");
             api("/providers/test-desktop", {method: "POST"})
               .then(res => {
                  if (res.status === "success") {
-                    toast(res.message, "ok");
-                 } else {
-                    openModal("RPA Connection Failed", 
+                    openModal("Connection successful",
                       el("div", {},
-                        el("p", { text: "ForgeFlow could not connect to the Antigravity Desktop app. Please make sure it is open and running." }),
-                        el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; background: var(--bg); padding: 12px; border: 1px solid rgba(182, 79, 79, 0.3); border-radius: 4px; overflow-y: auto; max-height: 400px; margin-top: 12px;" }, res.message + (res.details ? "\n\n" + res.details : ""))
+                        el("p", { text: "Searching for Antigravity..." }),
+                        el("p", { text: res.details, style: "font-weight: bold; margin-top: 10px; color: var(--ok);" })
+                      ),
+                      [el("button", { class: "btn primary", text: "Close", onclick: () => { closeModal(); refresh(); } })]
+                    );
+                 } else {
+                    openModal("Antigravity application not detected", 
+                      el("div", {},
+                        el("p", { text: "RPA Error: Failed to connect to application." }),
+                        el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; background: var(--bg); padding: 12px; border: 1px solid rgba(182, 79, 79, 0.3); border-radius: 4px; overflow-y: auto; max-height: 400px; margin-top: 12px;" }, res.details ? res.details : res.message)
                       ),
                       [el("button", { class: "btn primary", text: "Close", onclick: closeModal })],
                       true

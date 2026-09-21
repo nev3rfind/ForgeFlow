@@ -376,7 +376,18 @@ async def websocket_endpoint(websocket: WebSocket, task_id: str):
 
 @app.get("/providers")
 def get_providers():
-    return [p.model_dump() for p in provider_registry.get_all()]
+    providers = []
+    for p in provider_registry.get_all():
+        dump = p.model_dump()
+        if dump["id"] == "agy_desktop":
+            from app.integrations.agy_desktop_adapter import AgyDesktopAdapter
+            adapter = AgyDesktopAdapter()
+            if adapter.is_available():
+                dump["status"] = "CONNECTED"
+            else:
+                dump["status"] = "NOT FOUND"
+        providers.append(dump)
+    return providers
 
 @app.get("/settings/roles")
 def get_roles():
@@ -457,24 +468,37 @@ def test_desktop_connection():
         f.write(f"\n[{timestamp}] --- Test Connection Attempt ---\n")
         
         try:
-            from app.integrations.desktop_rpa_engine import DesktopRPAEngine
+            from app.integrations.desktop_rpa_engine import DesktopRPAEngine, RPAEngineError
             # Initialize engine pointing to Antigravity window
             rpa = DesktopRPAEngine(".*Antigravity.*")
             
             # Check if we can connect and focus
             rpa.connect()
             
+            success_diag = getattr(rpa, 'last_diagnostic', "Antigravity detected successfully.")
+            
             # Test input (just pasting to clipboard and typing, without hitting enter to keep it safe)
             msg = "RPA Connection Test Successful!"
             rpa.paste_text(msg)
             
             f.write(f"Result: SUCCESS\nMessage: Found Antigravity app and sent text: '{msg}'\n")
-            return {"status": "success", "message": "Successfully found the Antigravity Desktop app and injected text."}
+            return {"status": "success", "message": "Connection successful", "details": success_diag}
+            
         except Exception as e:
+            from app.integrations.desktop_rpa_engine import RPAEngineError
+            diagnostic = getattr(e, 'diagnostic', "")
+            
             import traceback
             tb = traceback.format_exc()
-            f.write(f"Result: ERROR\nMessage: {str(e)}\nDetails:\n{tb}\n")
-            return {"status": "error", "message": str(e), "details": tb}
+            f.write(f"Result: ERROR\nMessage: {str(e)}\nDiagnostic: {diagnostic}\nDetails:\n{tb}\n")
+            
+            # Hide raw exception traces from normal users, show diagnostic instead
+            msg = str(e)
+            if isinstance(e, RPAEngineError):
+                return {"status": "error", "message": msg, "details": diagnostic}
+            
+            # Generic error fallback
+            return {"status": "error", "message": "An unexpected error occurred", "details": "See logs for details."}
 
 @app.post("/providers/custom")
 async def add_custom_provider(info: ProviderInfo):
