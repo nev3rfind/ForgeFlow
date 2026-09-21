@@ -448,7 +448,7 @@ async def get_abacus_billing():
 
 
 @app.post("/providers/test-desktop")
-async def test_desktop_connection():
+def test_desktop_connection():
     try:
         from app.integrations.desktop_rpa_engine import DesktopRPAEngine
         # Initialize engine pointing to Antigravity window

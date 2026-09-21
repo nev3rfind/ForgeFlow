@@ -20,16 +20,18 @@ class DesktopRPAEngine:
         """Attempts to locate the application window and bring it to the foreground."""
         try:
             logger.info(f"RPA: Searching for window matching '{self.app_title_regex}'")
-            desktop = Desktop(backend=self.backend)
-            windows = desktop.windows(title_re=self.app_title_regex)
+            from pywinauto.findwindows import find_elements
+            elements = find_elements(title_re=self.app_title_regex)
             
-            if not windows:
+            if not elements:
                 raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
             
-            self.main_window = windows[0]
+            # Connect to the process using the first found element
+            pid = elements[0].process_id
+            self.app = Application(backend=self.backend).connect(process=pid)
             
-            # Use Application to connect to the process
-            self.app = Application(backend=self.backend).connect(process=self.main_window.process_id())
+            # Get the main window from the connected app using the same regex
+            self.main_window = self.app.window(title_re=self.app_title_regex)
             
             # Bring to foreground safely
             try:
