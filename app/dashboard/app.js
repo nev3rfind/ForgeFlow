@@ -1108,6 +1108,23 @@ function viewSettings() {
 }
 
 async function updateRole(role, provider, model) {
+  if (provider === "agy_desktop") {
+    toast("Verifying Desktop RPA connection...", "info");
+    try {
+      const res = await api("/providers/test-desktop", { method: "POST" });
+      if (res.status !== "success") {
+        toast("RPA Connection Failed: Please open the Antigravity Desktop app first.", "err");
+        render(); // Revert dropdown visually
+        return;
+      }
+      toast("RPA Connection Verified!", "ok");
+    } catch (e) {
+      toast("RPA Check Error: " + e.message, "err");
+      render();
+      return;
+    }
+  }
+
   try {
     await api(`/settings/roles/${role}`, { method: "PUT", body: { provider, model } });
     toast("Role updated", "ok");
@@ -1115,6 +1132,7 @@ async function updateRole(role, provider, model) {
   } catch (e) {
     toast(e.message, "err");
   }
+}
 }
 
 /* ---------- modals ---------- */
