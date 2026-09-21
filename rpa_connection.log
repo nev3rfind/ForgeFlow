@@ -17,3 +17,130 @@ Traceback (most recent call last):
     raise RPAEngineError(f"Failed to connect to application: {e}")
 app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: No window found matching '.*Antigravity.*'
 
+
+[2026-09-21 23:14:12] --- Test Connection Attempt ---
+Result: ERROR
+Message: Failed to connect to application: No window found matching '.*Antigravity.*'
+Details:
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 27, in connect
+    raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
+app.integrations.desktop_rpa_engine.RPAEngineError: No window found matching '.*Antigravity.*'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\main.py", line 465, in test_desktop_connection
+    rpa.connect()
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 48, in connect
+    raise RPAEngineError(f"Failed to connect to application: {e}")
+app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: No window found matching '.*Antigravity.*'
+
+
+[2026-09-21 23:14:22] --- Test Connection Attempt ---
+Result: ERROR
+Message: Failed to connect to application: No window found matching '.*Antigravity.*'
+Details:
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 27, in connect
+    raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
+app.integrations.desktop_rpa_engine.RPAEngineError: No window found matching '.*Antigravity.*'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\main.py", line 465, in test_desktop_connection
+    rpa.connect()
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 48, in connect
+    raise RPAEngineError(f"Failed to connect to application: {e}")
+app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: No window found matching '.*Antigravity.*'
+
+
+[2026-09-21 23:14:24] --- Test Connection Attempt ---
+Result: ERROR
+Message: Failed to connect to application: No window found matching '.*Antigravity.*'
+Details:
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 27, in connect
+    raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
+app.integrations.desktop_rpa_engine.RPAEngineError: No window found matching '.*Antigravity.*'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\main.py", line 465, in test_desktop_connection
+    rpa.connect()
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 48, in connect
+    raise RPAEngineError(f"Failed to connect to application: {e}")
+app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: No window found matching '.*Antigravity.*'
+
+
+[2026-09-21 23:20:00] --- Test Connection Attempt ---
+Result: ERROR
+Message: Failed to connect to application: cannot fit 'int' into an index-sized integer
+Details:
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 24, in connect
+    elements = find_elements(title_re=self.app_title_regex)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\findwindows.py", line 283, in find_elements
+    elements = [elem for elem in elements if _title_match(elem)]
+                                             ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\findwindows.py", line 279, in _title_match
+    t = w.rich_text
+        ^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\win32_element_info.py", line 83, in rich_text
+    return handleprops.text(self.handle)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\handleprops.py", line 92, in text
+    buffer_ = create_unicode_buffer(length)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\AppData\Local\Programs\Python\Python312\Lib\ctypes\__init__.py", line 299, in create_unicode_buffer
+    buftype = c_wchar * init
+              ~~~~~~~~^~~~~~
+OverflowError: cannot fit 'int' into an index-sized integer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\main.py", line 465, in test_desktop_connection
+    rpa.connect()
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 48, in connect
+    raise RPAEngineError(f"Failed to connect to application: {e}")
+app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: cannot fit 'int' into an index-sized integer
+
+
+[2026-09-21 23:20:15] --- Test Connection Attempt ---
+Result: ERROR
+Message: Failed to connect to application: cannot fit 'int' into an index-sized integer
+Details:
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 24, in connect
+    elements = find_elements(title_re=self.app_title_regex)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\findwindows.py", line 283, in find_elements
+    elements = [elem for elem in elements if _title_match(elem)]
+                                             ^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\findwindows.py", line 279, in _title_match
+    t = w.rich_text
+        ^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\win32_element_info.py", line 83, in rich_text
+    return handleprops.text(self.handle)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\ForgeFlow\.venv\Lib\site-packages\pywinauto\handleprops.py", line 92, in text
+    buffer_ = create_unicode_buffer(length)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\ddona\AppData\Local\Programs\Python\Python312\Lib\ctypes\__init__.py", line 299, in create_unicode_buffer
+    buftype = c_wchar * init
+              ~~~~~~~~^~~~~~
+OverflowError: cannot fit 'int' into an index-sized integer
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\ddona\ForgeFlow\app\main.py", line 465, in test_desktop_connection
+    rpa.connect()
+  File "C:\Users\ddona\ForgeFlow\app\integrations\desktop_rpa_engine.py", line 48, in connect
+    raise RPAEngineError(f"Failed to connect to application: {e}")
+app.integrations.desktop_rpa_engine.RPAEngineError: Failed to connect to application: cannot fit 'int' into an index-sized integer
+

@@ -20,18 +20,38 @@ class DesktopRPAEngine:
         """Attempts to locate the application window and bring it to the foreground."""
         try:
             logger.info(f"RPA: Searching for window matching '{self.app_title_regex}'")
-            from pywinauto.findwindows import find_elements
-            elements = find_elements(title_re=self.app_title_regex)
             
-            if not elements:
+            import ctypes
+            import re
+            
+            EnumWindows = ctypes.windll.user32.EnumWindows
+            EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+            GetWindowText = ctypes.windll.user32.GetWindowTextW
+            GetWindowTextLength = ctypes.windll.user32.GetWindowTextLengthW
+            IsWindowVisible = ctypes.windll.user32.IsWindowVisible
+
+            matches = []
+            pattern = re.compile(self.app_title_regex, re.IGNORECASE)
+
+            def foreach_window(hwnd, lParam):
+                if IsWindowVisible(hwnd):
+                    length = GetWindowTextLength(hwnd)
+                    if 0 < length < 10000:
+                        buff = ctypes.create_unicode_buffer(length + 1)
+                        GetWindowText(hwnd, buff, length + 1)
+                        title = buff.value
+                        if pattern.search(title):
+                            matches.append(hwnd)
+                return True
+
+            EnumWindows(EnumWindowsProc(foreach_window), 0)
+            
+            if not matches:
                 raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
             
-            # Connect directly via the window handle to avoid PID integer-size overflow bugs on 64-bit Windows
-            hwnd = elements[0].handle
+            hwnd = matches[0]
             self.app = Application(backend=self.backend).connect(handle=hwnd)
-            
-            # Get the main window from the connected app using the same regex
-            self.main_window = self.app.window(title_re=self.app_title_regex)
+            self.main_window = self.app.window(handle=hwnd)
             
             # Bring to foreground safely
             try:
