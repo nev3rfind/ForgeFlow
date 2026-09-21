@@ -962,10 +962,19 @@ function viewSettings() {
                  if (res.status === "success") {
                     toast(res.message, "ok");
                  } else {
-                    toast("RPA Error: " + res.message, "err");
+                    openModal("RPA Connection Failed", 
+                      el("div", {},
+                        el("p", { text: "ForgeFlow could not connect to the Antigravity Desktop app. Please make sure it is open and running." }),
+                        el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; background: var(--bg); padding: 12px; border: 1px solid rgba(182, 79, 79, 0.3); border-radius: 4px; overflow-y: auto; max-height: 400px; margin-top: 12px;" }, res.message + (res.details ? "\n\n" + res.details : ""))
+                      ),
+                      [el("button", { class: "btn primary", text: "Close", onclick: closeModal })],
+                      true
+                    );
                  }
               })
-              .catch(e => toast("Network error: " + e.message, "err"));
+              .catch(e => {
+                  openModal("RPA Network Error", el("p", { text: e.message }), [el("button", { class: "btn primary", text: "Close", onclick: closeModal })]);
+              });
           }
         }) : null,
         el("div", { class: "flex" },
@@ -1113,13 +1122,20 @@ async function updateRole(role, provider, model) {
     try {
       const res = await api("/providers/test-desktop", { method: "POST" });
       if (res.status !== "success") {
-        toast("RPA Connection Failed: Please open the Antigravity Desktop app first.", "err");
+        openModal("RPA Connection Failed", 
+          el("div", {},
+            el("p", { text: "ForgeFlow could not connect to the Antigravity Desktop app. Please make sure it is open and running." }),
+            el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; background: var(--bg); padding: 12px; border: 1px solid rgba(182, 79, 79, 0.3); border-radius: 4px; overflow-y: auto; max-height: 400px; margin-top: 12px;" }, res.message + (res.details ? "\n\n" + res.details : ""))
+          ),
+          [el("button", { class: "btn primary", text: "Close", onclick: closeModal })],
+          true
+        );
         render(); // Revert dropdown visually
         return;
       }
       toast("RPA Connection Verified!", "ok");
     } catch (e) {
-      toast("RPA Check Error: " + e.message, "err");
+      openModal("RPA Network Error", el("p", { text: e.message }), [el("button", { class: "btn primary", text: "Close", onclick: closeModal })]);
       render();
       return;
     }

@@ -26,9 +26,9 @@ class DesktopRPAEngine:
             if not elements:
                 raise RPAEngineError(f"No window found matching '{self.app_title_regex}'")
             
-            # Connect to the process using the first found element
-            pid = elements[0].process_id
-            self.app = Application(backend=self.backend).connect(process=pid)
+            # Connect directly via the window handle to avoid PID integer-size overflow bugs on 64-bit Windows
+            hwnd = elements[0].handle
+            self.app = Application(backend=self.backend).connect(handle=hwnd)
             
             # Get the main window from the connected app using the same regex
             self.main_window = self.app.window(title_re=self.app_title_regex)
