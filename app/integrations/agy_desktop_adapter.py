@@ -5,12 +5,12 @@ from typing import AsyncGenerator, Type, Dict, Any, List
 from pydantic import BaseModel
 import time
 
-from app.integrations.base import BaseProvider
+from app.integrations.provider import AgentProvider
 from app.integrations.desktop_rpa_engine import DesktopRPAEngine, RPAEngineError
 
 logger = logging.getLogger(__name__)
 
-class AgyDesktopAdapter(BaseProvider):
+class AgyDesktopAdapter(AgentProvider):
     """
     Adapter that drives the Antigravity Desktop App via Robotic Process Automation (RPA).
     This mimics an API by physically pasting prompts into the app and extracting the response.
@@ -101,42 +101,59 @@ class AgyDesktopAdapter(BaseProvider):
                 # Try to copy the last message. In many AI apps, Ctrl+Shift+C copies the last response.
                 # If not, we will attempt to find all 'Text' controls and get the last one.
                 try:
-                    # In UIA, we can extract text without clipboard if the app exposes it!
+                    current_text = ""
+                    # Fast UIA text extraction
                     text_elements = self.rpa.main_window.descendants(control_type="Text")
                     if text_elements:
-                        # The last few text elements usually contain the latest response
-                        current_text = "\n".join([t.texts()[0] for t in text_elements[-10:] if t.texts()])
+                        current_text = "\n".join([t.texts()[0] for t in text_elements[-15:] if t.texts()])
+                    else:
+                        # Blur input box using ESC or TAB to allow global shortcut
+                        self.rpa.send_keystrokes('{ESC}')
+                        await asyncio.sleep(0.1)
+                        # Fallback to clipboard if UIA fails
+                        self.rpa.send_keystrokes('^a^c')
+                        await asyncio.sleep(0.5)
+                        current_text = self.rpa.read_clipboard()
                         
-                        if current_text == last_text and current_text.strip():
-                            stable_count += 1
-                        else:
-                            last_text = current_text
-                            stable_count = 0
-                            
-                        # If the text hasn't changed in 4 seconds (2 loops) and contains valid JSON, we might be done.
-                        if stable_count >= 2 and "{" in current_text and "}" in current_text:
-                            yield {"type": "event", "content": "[RPA] Generation appears complete."}
-                            break
-                except Exception:
-                    pass
+                    if current_text and current_text == last_text and current_text.strip():
+                        stable_count += 1
+                    else:
+                        last_text = current_text
+                        stable_count = 0
+                        
+                    # If the text hasn't changed in 4 seconds (2 loops) and contains valid JSON, we might be done.
+                    if stable_count >= 2 and "{" in current_text and "}" in current_text:
+                        yield {"type": "event", "content": "[RPA] Generation appears complete."}
+                        break
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(f"RPA extraction loop warning: {e}")
                     
             # 5. Extract JSON
             # We will try to parse the last_text to find the JSON schema
             import re
             
-            # Look for ```json ... ```
-            match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', last_text, re.DOTALL)
+            # Look for ```json ... ``` (use finditer to get the LAST one in case of chat history)
+            matches = list(re.finditer(r'```(?:json)?\s*(\{.*?\})\s*```', last_text, re.DOTALL))
             raw_json_str = None
-            if match:
-                raw_json_str = match.group(1)
+            if matches:
+                raw_json_str = matches[-1].group(1)
             else:
-                # Fallback to outermost braces
-                match = re.search(r'(\{[\s\\S]*\})', last_text)
-                if match:
-                    raw_json_str = match.group(1)
+                # Bracket matching from the end to find the outermost valid JSON object
+                open_braces = 0
+                end_idx = last_text.rfind('}')
+                if end_idx != -1:
+                    for i in range(end_idx, -1, -1):
+                        if last_text[i] == '}':
+                            open_braces += 1
+                        elif last_text[i] == '{':
+                            open_braces -= 1
+                            if open_braces == 0:
+                                raw_json_str = last_text[i:end_idx+1]
+                                break
                     
             if not raw_json_str:
-                raise RPAEngineError("Could not extract JSON from the Desktop App response.")
+                raise RPAEngineError(f"Could not extract JSON from the Desktop App response. Raw text was: {last_text}")
                 
             parsed = json.loads(raw_json_str)
             validated = schema.model_validate(parsed)

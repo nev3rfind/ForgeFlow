@@ -2,7 +2,7 @@ import time
 import pyperclip
 import logging
 import ctypes
-from ctypes.wintypes import DWORD, MAX_PATH
+from ctypes.wintypes import DWORD, MAX_PATH, HWND, LPARAM
 import re
 from pywinauto import Application
 from pywinauto.keyboard import send_keys
@@ -39,7 +39,7 @@ class DesktopRPAEngine:
     def _find_robust_antigravity_window(self):
         user32 = ctypes.windll.user32
         EnumWindows = user32.EnumWindows
-        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+        EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.wintypes.HWND, ctypes.wintypes.LPARAM)
         GetWindowText = user32.GetWindowTextW
         GetWindowTextLength = user32.GetWindowTextLengthW
         IsWindowVisible = user32.IsWindowVisible
@@ -89,7 +89,7 @@ class DesktopRPAEngine:
                 score += 5
                 
             candidates.append({
-                "hwnd": hwnd,
+                "hwnd": int(hwnd),
                 "title": title,
                 "process": proc_name,
                 "score": score
