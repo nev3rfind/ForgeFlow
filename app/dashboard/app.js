@@ -1131,7 +1131,7 @@ async function updateRole(role, provider, model) {
         openModal("RPA Connection Failed", 
           el("div", {},
             el("p", { text: "ForgeFlow could not connect to the Antigravity Desktop app. Please make sure it is open and running." }),
-            el("div", { class: "mono", style: "color: var(--err); font-size: 13px; white-space: pre-wrap; background: var(--bg); padding: 12px; border: 1px solid rgba(182, 79, 79, 0.3); border-radius: 4px; overflow-y: auto; max-height: 400px; margin-top: 12px;" }, res.message + (res.details ? "\n\n" + res.details : ""))
+            el("div", { class: "mono", style: "color: var(--text-dim); font-size: 13px; white-space: pre-wrap; background: rgba(0,0,0,0.03); padding: 16px; border: 1px solid var(--border-warm); border-radius: 6px; overflow-y: auto; margin-top: 16px; line-height: 1.5; max-height: 250px;" }, res.message + (res.details ? "\n\n" + res.details : ""))
           ),
           [el("button", { class: "btn primary", text: "Close", onclick: closeModal })],
           true
@@ -1162,150 +1162,18 @@ function closeModal() { $("#modal-root").innerHTML = ""; }
 function openModal(title, bodyNode, footNodes, wide) {
   const root = $("#modal-root");
   root.innerHTML = "";
-  const overlay = el("div", { class: "overlay", onclick: (e) => { if (e.target === overlay) closeModal(); } },
-    el("div", { class: "modal" + (wide ? " wide" : "") },
-      el("div", { class: "modal-head" },
-        el("h2", { text: title }),
-        el("div", { class: "spacer" }),
-        el("button", { class: "btn sm ghost", text: "\u2715", onclick: closeModal })
+  const overlay = el("div", { id: "modal-bg", onclick: (e) => { if (e.target === overlay) closeModal(); } },
+    el("div", { id: "modal", style: wide ? "max-width: 700px;" : "" },
+      el("div", { class: "m-head", style: "display: flex; align-items: center;" },
+        el("div", { text: title, style: "flex: 1; font-weight: 600; font-size: 16px; margin: 0; color: var(--heading-color);" }),
+        el("button", { class: "btn sm ghost", text: "✕", onclick: closeModal, style: "margin: -8px -8px -8px 0; font-size: 14px; padding: 4px 8px; color: var(--text-dim);" })
       ),
-      el("div", { class: "modal-body" }, bodyNode),
-      el("div", { class: "modal-foot" }, footNodes)
+      el("div", { class: "m-body" }, bodyNode),
+      el("div", { class: "m-foot" }, footNodes)
     )
   );
   root.appendChild(overlay);
 }
-
-function openNewProject() {
-  const name = el("input", { placeholder: "my-project" });
-  const repository = el("input", { placeholder: "C:\\path\\to\\repo" });
-  const type = el("select", {},
-    el("option", { value: "python", text: "python" }), el("option", { value: "javascript", text: "javascript" }),
-    el("option", { value: "typescript", text: "typescript" }), el("option", { value: "go", text: "go" }),
-    el("option", { value: "rust", text: "rust" }), el("option", { value: "java", text: "java" })
-  );
-  const test = el("input", { placeholder: "pytest -q" });
-  const body = el("div", {},
-    el("div", { class: "field" }, el("label", { text: "Name" }), name),
-    el("div", { class: "field" }, el("label", { text: "Repository Path" }), repository, el("div", { class: "hint", text: "Absolute path to the local git repository." })),
-    el("div", { class: "row" },
-      el("div", { class: "field" }, el("label", { text: "Type" }), type),
-      el("div", { class: "field" }, el("label", { text: "Test Command" }), test)
-    )
-  );
-  const submit = async () => {
-    if (!name.value.trim() || !repository.value.trim()) { toast("Name and repository path are required", "err"); return; }
-    try {
-      await api("/projects", { method: "POST", body: { name: name.value.trim(), repository: repository.value.trim(), type: type.value, test_command: test.value.trim() || null } });
-      closeModal(); toast("Project created", "ok"); await loadAll();
-    } catch (e) { toast("Create failed: " + e.message, "err"); }
-  };
-  openModal("New Project", body, [
-    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
-    el("button", { class: "btn primary", text: "Create", onclick: submit })
-  ]);
-}
-
-function openNewTask(projectId) {
-  const title = el("input", { placeholder: "Fix the flaky login test" });
-  const desc = el("textarea", { placeholder: "Describe the problem, expected behaviour, and any constraints." });
-  const proj = el("select", {},
-    state.projects.map((p) => el("option", { value: p.id, text: p.name, selected: projectId === p.id ? "selected" : null }))
-  );
-  const prio = el("select", {},
-    el("option", { value: "medium", text: "medium" }), el("option", { value: "high", text: "high" }), el("option", { value: "low", text: "low" })
-  );
-  const maxIter = el("input", { type: "number", value: "3", min: "1", max: "10" });
-  const body = el("div", {},
-    el("div", { class: "field" }, el("label", { text: "Title" }), title),
-    el("div", { class: "field" }, el("label", { text: "Description" }), desc),
-    el("div", { class: "field" }, el("label", { text: "Project" }), proj),
-    el("div", { class: "row" },
-      el("div", { class: "field" }, el("label", { text: "Priority" }), prio),
-      el("div", { class: "field" }, el("label", { text: "Max Iterations" }), maxIter)
-    )
-  );
-  const submit = async () => {
-    if (!title.value.trim()) { toast("Title is required", "err"); return; }
-    if (!proj.value) { toast("Create a project first", "err"); return; }
-    try {
-      await api("/tasks", { method: "POST", body: {
-        title: title.value.trim(), description: desc.value.trim(), project_id: proj.value,
-        priority: prio.value, max_iterations: parseInt(maxIter.value, 10) || 3
-      }});
-      closeModal(); toast("Task created", "ok"); await loadAll();
-    } catch (e) { toast("Create failed: " + e.message, "err"); }
-  };
-  openModal("New Task", body, [
-    el("button", { class: "btn", text: "Cancel", onclick: closeModal }),
-    el("button", { class: "btn primary", text: "Create", onclick: submit })
-  ]);
-}
-
-async function openTask(id) {
-  const t = taskById(id);
-  if (!t) { toast("Task not found", "err"); return; }
-  let events = [], artifacts = [];
-  try {
-    const r = await Promise.all([
-      api("/tasks/" + id + "/events").catch(() => []),
-      api("/tasks/" + id + "/artifacts").catch(() => [])
-    ]);
-    events = r[0] || [];
-    artifacts = r[1] || [];
-  } catch (_) {}
-
-  const body = el("div", {},
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Status" }), el("div", { class: "v" }, statusBadge(t.status))),
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Agent" }), el("div", { class: "v" }, t.current_agent ? el("span", { class: "agent-badge", text: agentDisplayName(t.current_agent) }) : el("span", { class: "faint", text: "-" }))),
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Project" }), el("div", { class: "v", text: projectName(t.project_id) })),
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Priority" }), el("div", { class: "v" }, priorityBadge(t.priority))),
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Iteration" }), el("div", { class: "v mono", text: (t.iteration || 0) + " / " + (t.max_iterations || 0) })),
-    el("div", { class: "kv" }, el("div", { class: "k", text: "Updated" }), el("div", { class: "v", text: fmtDateTime(t.updated_at) })),
-    t.description ? el("div", { class: "mt" }, el("div", { class: "stat-label mb", text: "Description" }), el("div", { class: "pre", text: t.description })) : null,
-    t.error_information ? el("div", { class: "mt" }, el("div", { class: "stat-label mb", text: "Error" }), el("div", { class: "pre err-pre", text: t.error_information })) : null,
-    el("div", { class: "mt" },
-      el("div", { class: "stat-label mb", text: "Recent Events (" + events.length + ")" }),
-      events.length
-        ? el("div", { class: "log", style: "height:200px" }, events.slice(-40).map(logLine))
-        : el("div", { class: "faint", text: "No events." })
-    ),
-    el("div", { class: "mt" },
-      el("div", { class: "stat-label mb", text: "Artifacts (" + artifacts.length + ")" }),
-      artifacts.length
-        ? el("div", {}, artifacts.map((a) => el("div", { class: "kv" },
-            el("div", { class: "k" }, el("span", { class: "badge cyan", text: a.kind || "artifact" }), el("span", { class: "mono faint", style: "margin-left:8px", text: a.path || a.name || shortId(a.id) })),
-            el("div", { class: "v faint", text: fmtDateTime(a.created_at) })
-          )))
-        : el("div", { class: "faint", text: "No artifacts." })
-    )
-  );
-
-  openModal(t.title, body, [
-    el("button", { class: "btn", text: "Close", onclick: closeModal }),
-    el("button", { class: "btn", text: "Mission Control", onclick: () => { closeModal(); go("mission"); selectMissionTask(id); } }),
-    el("button", { class: "btn primary", text: "Run", onclick: () => { closeModal(); runTask(id); } })
-  ], true);
-}
-
-
-  /* ---------- settings actions ---------- */
-  function promptClearTaskData() {
-    openModal("Clear Task Data",
-      el("p", { text: "Are you sure? This will delete all tasks, events, and artifacts." }),
-      [
-        el("button", { class: "btn ghost", text: "Cancel", onclick: closeModal }),
-        el("button", { class: "btn danger", text: "Clear Data", onclick: async () => {
-          try {
-            await api("/settings/reset-data", { method: "POST" });
-            toast("Task data cleared", "ok");
-            closeModal();
-            loadAll();
-          } catch (e) { toast(e.message, "err"); }
-        }})
-      ]
-    );
-  }
 
   function promptResetConfig() {
     openModal("Reset Configuration",
