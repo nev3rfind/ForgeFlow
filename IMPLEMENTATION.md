@@ -151,3 +151,10 @@ An independent senior engineering review evaluated the initial fix and identifie
 - **Assessment**:
   - Controlled workspace root: `runtime/worktrees/forgeflow_task_<task_id>` utilizes ~90 characters with full UUIDs, leaving >160 characters for nested project files under standard Windows 260-char limits.
   - Added `-c core.longpaths=true` to all Git invocations in `GitService._run_git()`, enabling Git for Windows to leverage Windows extended-length path APIs (`\\?\`) seamlessly across all worktrees.
+
+ # # #   5 .   D e s k t o p   R P A   A r c h i t e c t u r e 
+ -   B y p a s s e d   p y w i n a u t o ' s   d e f a u l t   w i n d o w   e n u m e r a t i o n   d u e   t o   i n t e g e r - s i z e   l i m i t s   ( c a n n o t   f i t   ' i n t '   i n t o   a n   i n d e x - s i z e d   i n t e g e r )   o c c u r r i n g   w h e n   n a v i g a t i n g   c o m p l e x   U I A / D e s k t o p   t r e e s   o n   6 4 - b i t   s y s t e m s . 
+ -   I m p l e m e n t e d   a   r o b u s t   C - l e v e l   w i n d o w   d i s c o v e r y   u s i n g   c t y p e s . w i n d l l . u s e r 3 2 . E n u m W i n d o w s . 
+ -   A d d e d   i s o l a t i o n   c h e c k s :   T h e   R P A   e n g i n e   s t r i c t l y   f i l t e r s   o u t   t h e   F o r g e F l o w   d a s h b o a r d   b r o w s e r   ( d e t e c t s   l o c a l h o s t ,    o r g e f l o w ,   o r   c h r o m e   i s   b e i n g   c o n t r o l l e d )   t o   p r e v e n t   b r o w s e r   s t e a l i n g . 
+ -   C o n n e c t i o n s   a r e   s t r i c t l y   r o u t e d   t h r o u g h   h a n d l e - b a s e d   b i n d i n g s   t o   t h e   e x a c t   e x t r a c t e d   A n t i g r a v i t y   p r o c e s s .  
+ 
