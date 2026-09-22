@@ -1155,7 +1155,6 @@ async function updateRole(role, provider, model) {
     toast(e.message, "err");
   }
 }
-}
 
 /* ---------- modals ---------- */
 function closeModal() { $("#modal-root").innerHTML = ""; }
