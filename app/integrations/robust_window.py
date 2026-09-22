@@ -46,8 +46,13 @@ def find_robust_antigravity_window():
         
         proc_name = get_process_name_by_hwnd(hwnd)
         
-        # STRONG EXCLUSION: Never attach to ForgeFlow dashboard or browser automation banners
-        if "forgeflow" in title.lower() or "localhost" in title.lower() or "chrome is being controlled" in title.lower():
+        # STRONG EXCLUSION: Never attach to ForgeFlow dashboard in web browsers
+        is_browser = proc_name in ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe")
+        if is_browser and ("forgeflow" in title.lower() or "localhost" in title.lower() or "chrome is being controlled" in title.lower()):
+            return True
+        
+        # Explicitly reject windows that are literally just "ForgeFlow" without Antigravity
+        if "antigravity" not in title.lower() and "forgeflow" in title.lower():
             return True
             
         score = 0

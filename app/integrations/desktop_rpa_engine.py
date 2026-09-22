@@ -69,9 +69,16 @@ class DesktopRPAEngine:
                 
             proc_name = self._get_process_name_by_hwnd(hwnd)
             
-            # STRONG EXCLUSION: Never attach to ForgeFlow dashboard
-            if "forgeflow" in title.lower() or "localhost" in title.lower() or "chrome is being controlled" in title.lower():
-                diagnostics.append(f"- Ignored unsafe window: '{title}' (Process: {proc_name}) - Matches ForgeFlow Dashboard.")
+            # STRONG EXCLUSION: Never attach to ForgeFlow dashboard in web browsers
+            # We must be careful not to exclude the actual Antigravity app just because the user is discussing "ForgeFlow" in it!
+            is_browser = proc_name in ("chrome.exe", "msedge.exe", "firefox.exe", "brave.exe", "opera.exe")
+            if is_browser and ("forgeflow" in title.lower() or "localhost" in title.lower() or "chrome is being controlled" in title.lower()):
+                diagnostics.append(f"- Ignored unsafe web browser window: '{title}' (Process: {proc_name}) - Matches ForgeFlow Dashboard.")
+                return True
+            
+            # Explicitly reject windows that are literally just "ForgeFlow" without Antigravity
+            if "antigravity" not in title.lower() and "forgeflow" in title.lower():
+                diagnostics.append(f"- Ignored unsafe window: '{title}' (Process: {proc_name}) - Missing Antigravity in title.")
                 return True
                 
             score = 0
