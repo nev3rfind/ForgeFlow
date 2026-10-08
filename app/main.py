@@ -481,7 +481,11 @@ def test_desktop_connection():
             msg = "RPA Connection Test Successful!"
             rpa.paste_text(msg)
             
-            f.write(f"Result: SUCCESS\nMessage: Found Antigravity app and sent text: '{msg}'\n")
+            f.write(
+                f"Result: SUCCESS\n"
+                f"Message: Found Antigravity app and sent text: '{msg}'\n"
+                f"Details: {success_diag}\n"
+            )
             return {"status": "success", "message": "Connection successful", "details": success_diag}
             
         except Exception as e:

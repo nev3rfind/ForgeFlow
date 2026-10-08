@@ -274,7 +274,8 @@ async function loadAll() {
       api("/config").catch(() => null),
       api("/activity?limit=200").catch(() => []),
       api("/settings/roles").catch(() => ({})),
-      api("/providers").catch(() => [])
+      api("/providers").catch(() => []),
+      api("/settings/telemetry").catch(() => ({ providers: {} }))
     ]);
     state.projects = results[0] || [];
     state.tasks = results[1] || [];
@@ -283,7 +284,7 @@ async function loadAll() {
     state.activity = results[4] || [];
     state.roles = results[5] || {};
     state.providers = results[6] || [];
-      state.telemetry = results[7] || { providers: {} };
+    state.telemetry = results[7] || { providers: {} };
     setConn(true);
   } catch (e) {
     setConn(false, e.message);
@@ -897,6 +898,7 @@ function viewSettings() {
   // Ensure state variables exist
   state.roles = state.roles || {};
   state.providers = state.providers || [];
+  const isConnected = (status) => String(status || "").toLowerCase() === "connected";
   
   // Create sections: GENERAL, AGENT ROUTING, PROVIDERS, TELEMETRY, WORKSPACE, SECURITY, DANGER ZONE
   
@@ -938,7 +940,7 @@ function viewSettings() {
         el("div", { class: "field", style: "margin:0" }, el("label", { text: "Provider" }), provSel),
         el("div", { class: "field", style: "margin:0" }, el("label", { text: "Model" }), modSel),
         el("div", { class: "flex", style: "margin-top: auto; padding-top: 8px;" },
-          el("div", { class: "dot " + (p.status === "Connected" ? "ok" : "err") }),
+          el("div", { class: "dot " + (isConnected(p.status) ? "ok" : "err") }),
           el("span", { class: "faint", style: "font-size:12px", text: "Status: " + p.status })
         )
       )
@@ -992,7 +994,7 @@ function viewSettings() {
           }
         }) : null,
         el("div", { class: "flex" },
-          el("div", { class: "dot " + (p.status === "Connected" ? "ok" : (p.status === "RPA Ready" ? "warn" : "err")) }),
+          el("div", { class: "dot " + (isConnected(p.status) ? "ok" : (p.status === "RPA Ready" ? "warn" : "err")) }),
           el("span", { style: "font-weight: 500;", text: p.status })
         )
       )
@@ -1041,7 +1043,7 @@ function viewSettings() {
       "anthropic": "https://console.anthropic.com/settings/billing"
     };
 
-    const activeProviders = state.providers || [];
+    const activeProviders = [...(state.providers || [])];
     
     // Add default keys if they exist in config but aren't fully registered in providers yet
     const configKeys = Object.keys(state.config || {});
@@ -1050,12 +1052,13 @@ function viewSettings() {
 
     for (const p of activeProviders) {
       const pId = p.id.toLowerCase();
-      const url = billingUrls[pId] || "#";
+      const isDesktop = pId === "agy_desktop";
+      const url = billingUrls[pId];
       
       const pCard = el("div", { class: "card pad-0", style: "display: flex; flex-direction: column;" },
         el("div", { class: "card-head", style: "background: rgba(244, 162, 97, 0.05); display: flex; justify-content: space-between; align-items: center;" },
           el("h4", { text: p.display_name + " Account", style: "margin:0; font-size:13px; color: var(--brand-burgundy-primary);" }),
-          el("span", { class: "badge ok", style: "font-size: 10px;", text: p.status || "Connected" })
+          el("span", { class: "badge " + (isConnected(p.status) ? "ok" : "err"), style: "font-size: 10px;", text: p.status || "Unknown" })
         ),
         el("div", { class: "card-body", style: "flex: 1; display: flex; flex-direction: column; gap: 12px; padding: 16px;" },
           el("div", { style: "display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-warm); padding: 8px 0;" },
@@ -1067,7 +1070,9 @@ function viewSettings() {
             el("span", { style: "font-family: monospace;", text: (state.telemetry && state.telemetry.providers && state.telemetry.providers[pId]) ? String(state.telemetry.providers[pId].input_tokens + state.telemetry.providers[pId].output_tokens) : "0" })
           ),
           el("div", { class: "mt", style: "display: flex; justify-content: center;" },
-            url !== "#" ? 
+            isDesktop ?
+              el("span", { class: "faint", style: "font-size: 11px; font-style: italic;", text: "Local Desktop Session" }) :
+            url ?
               el("a", { class: "btn ghost", style: "text-decoration: none; font-size: 12px;", href: url, target: "_blank", text: "↗ Open Billing Dashboard" }) :
               el("span", { class: "faint", style: "font-size: 11px; font-style: italic;", text: "Provider dashboard unknown" })
           )
