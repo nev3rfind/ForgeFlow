@@ -46,13 +46,21 @@ function esc(s) {
 }
 
 function toast(msg, kind) {
-  const t = el("div", { class: "toast " + (kind || ""), text: msg });
-  $("#toasts").appendChild(t);
-  setTimeout(() => {
-    t.style.opacity = "0";
-    t.style.transition = "opacity .3s";
-    setTimeout(() => t.remove(), 320);
-  }, 3600);
+  const iconMap = { ok: "✓", err: "✕", info: "ℹ" };
+  const iconChar = iconMap[kind] || "•";
+  const iconNode = el("div", { class: "toast-icon", text: iconChar });
+  const textNode = el("div", { class: "toast-text", text: msg });
+  const t = el("div", { class: "toast " + (kind || "") }, iconNode, textNode);
+  const container = $("#toasts");
+  if (container) {
+    container.appendChild(t);
+    setTimeout(() => {
+      t.style.opacity = "0";
+      t.style.transform = "translateX(50px)";
+      t.style.transition = "opacity 0.3s ease, transform 0.3s ease";
+      setTimeout(() => t.remove(), 320);
+    }, 4000);
+  }
 }
 
 async function api(path, opts) {
