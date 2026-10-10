@@ -1,3 +1,7 @@
+param(
+    [switch]$OpenBrowser
+)
+
 $ErrorActionPreference = 'Stop'
 
 # 1. Set working directory to the directory where this script resides
@@ -49,11 +53,13 @@ Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host "Press CTRL+C to safely shut down." -ForegroundColor Yellow
 Write-Host ""
 
-# Optional convenience: open browser shortly after server start
-Start-Job -ScriptBlock {
-    Start-Sleep -Seconds 2
-    Start-Process "http://127.0.0.1:8000"
-} | Out-Null
+# Optional convenience: open browser shortly after server start if -OpenBrowser flag is provided
+if ($OpenBrowser) {
+    Start-Job -ScriptBlock {
+        Start-Sleep -Seconds 2
+        Start-Process "http://127.0.0.1:8000"
+    } | Out-Null
+}
 
 # 6. Start ForgeFlow in a loop so we can restart it from the UI
 while ($true) {
